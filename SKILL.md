@@ -254,16 +254,26 @@ battle.battle_continue()  // Source: function(){S||(S=!0,document.location+="")}
 ## Anti-Cheat Detection
 When anti-cheat triggers, it likely overlays the battle screen, causing `alive.length === 0` without `victorious` text appearing. The script detects this by counting consecutive idle loops (alive=0, no victory). After 10 loops (~5 seconds), it triggers an alert.
 
-**Alert system:**
-- **Sound**: 3 loud beeps via Web Audio API (880Hz, 0.8 gain)
-- **Notification**: Browser Notification API (requests permission on first load)
-- **Visual**: Button flashes orange/red for 30 seconds
+**Anti-cheat type**: Riddle Master — a pony identification captcha. The entire page is replaced with `#riddlemaster` element containing an image + checkboxes + countdown timer. Battle DOM is completely gone.
 
-## Tampermonkey Userscript (v2.0)
+**Detection methods (v2.1):**
+1. **Immediate `#riddlemaster` detection**: On page load, if `#riddlemaster` exists and autoArena was ON → alert immediately
+2. **Idle loop detection**: In battle, if `alive.length === 0` without victory for 10 consecutive loops (~3s) → alert
+3. **Bootstrap detection**: If autoArena was ON but `#ckey_attack` not found after 5s → alert
+
+**Alert system (triple notification):**
+- **Sound**: 5 alternating beeps via Web Audio API (880Hz/660Hz) + HTML Audio fallback
+- **Fullscreen overlay**: Red/orange flashing overlay covering entire page, click to dismiss, auto-remove after 60s
+- **Title flash**: Browser tab title alternates between `⚠ ALERT ⚠` and original title for 60s
+- **System notification**: macOS Notification (works after system-level permission fix)
+- **Button**: Updates to `🚨 TITLE` with orange background
+
+## Tampermonkey Userscript (v2.1)
 The `autoArena.user.js` file is a Tampermonkey userscript that handles everything autonomously:
 - Auto-fights each round
 - Auto-continues to next round via `battle_continue()`
 - **Stops on last round** (detects `finishbattle.png` / `goto_arena`)
-- **Alerts on anti-cheat** (sound + notification + flashing button)
+- **Detects Riddle Master** anti-cheat (`#riddlemaster`) immediately on page load
+- **Alerts on anti-cheat** (sound + overlay + title flash + notification)
 - **Alerts on errors** (unexpected script crashes)
 - Persists ON/OFF state across page refreshes via `GM_setValue`

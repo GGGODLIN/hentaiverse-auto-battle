@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HV Arena Auto Battle
 // @namespace    hv-auto-arena
-// @version      2.0
+// @version      2.1
 // @description  Automate HentaiVerse Arena battles - stops on last round, alerts on anti-cheat
 // @match        *://hentaiverse.org/*
 // @match        *://www.hentaiverse.org/*
@@ -15,23 +15,34 @@
 
   let battleRunning = false;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const waitFor = async (check, interval = 300, timeout = 3000) => {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      if (check()) return true;
+      await wait(interval);
+    }
+    return false;
+  };
   const isInBattle = () => !!document.getElementById("ckey_attack");
   const isVictorious = () =>
     document.body.innerText.substring(0, 500).includes("victorious");
+  const isRiddleMaster = () => !!document.getElementById("riddlemaster");
 
   // --- Alert System ---
-  // Pre-create AudioContext on user click so it's not suspended later
   let audioCtx = null;
-  document.addEventListener("click", () => {
-    if (!audioCtx) {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    } else if (audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
-  }, { once: false });
+  document.addEventListener(
+    "click",
+    () => {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } else if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    },
+    { once: false },
+  );
 
   function playAlertSound() {
-    // Method 1: Web Audio API (preferred, louder)
     try {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -43,7 +54,7 @@
         const gain = audioCtx.createGain();
         osc.connect(gain);
         gain.connect(audioCtx.destination);
-        osc.frequency.value = i % 2 === 0 ? 880 : 660; // Alternating tones
+        osc.frequency.value = i % 2 === 0 ? 880 : 660;
         gain.gain.value = 1.0;
         osc.start(audioCtx.currentTime + i * 0.3);
         osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
@@ -52,9 +63,10 @@
       console.error("AutoArena: Web Audio failed", e);
     }
 
-    // Method 2: HTML Audio fallback (works even if AudioContext is blocked)
     try {
-      const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczGj6NwN3PesJPJ4S3zt/FaFhRkLzW3LRiQTaGt9Xdv2xMS4u61NuzZUA7hLXV3bprSEiKu9fcsmZBOoW31d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZkA6hLXV3btqR0eKu9fcsmZAOoS11d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZj86g7XV3btqR0eKu9fcsGY+OYO11d27akdHirvX3LBmPjmDtdXdu2pHR4q719ywZj45g7XV3btpR0aJu9fbr2U9OIK01NusZkA6hLXU27xqR0eKutfcsmZAOoS11d27akdH");
+      const audio = new Audio(
+        "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczGj6NwN3PesJPJ4S3zt/FaFhRkLzW3LRiQTaGt9Xdv2xMS4u61NuzZUA7hLXV3bprSEiKu9fcsmZBOoW31d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZkA6hLXV3btqR0eKu9fcsmZAOoS11d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZj86g7XV3btqR0eKu9fcsGY+OYO11d27akdHirvX3LBmPjmDtdXdu2pHR4q719ywZj45g7XV3btpR0aJu9fbr2U9OIK01NusZkA6hLXU27xqR0eKutfcsmZAOoS11d27akdH",
+      );
       audio.volume = 1.0;
       audio.play().catch(() => {});
     } catch (e) {
@@ -62,51 +74,111 @@
     }
   }
 
-  function sendNotification(title, body) {
-    try {
-      if (Notification.permission === "granted") {
-        new Notification(title, { body, icon: "https://hentaiverse.org/favicon.ico" });
-      } else if (Notification.permission !== "denied") {
-        Notification.requestPermission().then((p) => {
-          if (p === "granted") {
-            new Notification(title, { body, icon: "https://hentaiverse.org/favicon.ico" });
-          }
-        });
-      }
-    } catch (e) {
-      console.error("AutoArena: Notification failed", e);
-    }
+  // Fullscreen overlay alert (works on any OS, no system notification needed)
+  function showOverlayAlert(title, body) {
+    // Remove existing overlay
+    document.getElementById("autoArenaOverlay")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "autoArenaOverlay";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "100vh",
+      zIndex: "999999",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "rgba(200, 0, 0, 0.85)",
+      color: "#fff",
+      fontFamily: "'Segoe UI', Arial, sans-serif",
+      cursor: "pointer",
+    });
+
+    overlay.innerHTML = `
+      <div style="font-size: 64px; margin-bottom: 20px;">🚨</div>
+      <div style="font-size: 36px; font-weight: bold; margin-bottom: 12px;">${title}</div>
+      <div style="font-size: 20px; margin-bottom: 30px;">${body}</div>
+      <div style="font-size: 14px; opacity: 0.7;">Click anywhere to dismiss</div>
+    `;
+
+    // Flash effect
+    let flash = true;
+    const flashInterval = setInterval(() => {
+      overlay.style.background = flash
+        ? "rgba(200, 0, 0, 0.85)"
+        : "rgba(255, 140, 0, 0.85)";
+      flash = !flash;
+    }, 500);
+
+    overlay.addEventListener("click", () => {
+      clearInterval(flashInterval);
+      overlay.remove();
+    });
+
+    document.body.appendChild(overlay);
+
+    // Auto-remove after 60 seconds
+    setTimeout(() => {
+      clearInterval(flashInterval);
+      overlay.remove();
+    }, 60000);
+  }
+
+  // Flash document title to attract attention
+  let titleFlashInterval = null;
+  function flashTitle(msg) {
+    const originalTitle = document.title;
+    let toggle = true;
+    if (titleFlashInterval) clearInterval(titleFlashInterval);
+    titleFlashInterval = setInterval(() => {
+      document.title = toggle ? `⚠ ${msg} ⚠` : originalTitle;
+      toggle = !toggle;
+    }, 1000);
+    // Stop after 60 seconds
+    setTimeout(() => {
+      clearInterval(titleFlashInterval);
+      titleFlashInterval = null;
+      document.title = originalTitle;
+    }, 60000);
   }
 
   function alertUser(title, body) {
     playAlertSound();
-    sendNotification(title, body);
-    // Also flash the button
-    btn.textContent = "🚨 " + title;
-    btn.style.background = "linear-gradient(135deg, #FF6F00, #FFA000)";
-    // Keep flashing
-    let flash = true;
-    const flashInterval = setInterval(() => {
-      btn.style.background = flash
-        ? "linear-gradient(135deg, #FF6F00, #FFA000)"
-        : "linear-gradient(135deg, #c62828, #e53935)";
-      flash = !flash;
-    }, 500);
-    // Stop flashing after 30 seconds
-    setTimeout(() => clearInterval(flashInterval), 30000);
+    showOverlayAlert(title, body);
+    flashTitle(title);
+    // Also update button if it exists
+    if (document.getElementById("autoArenaBtn")) {
+      btn.textContent = "🚨 " + title;
+      btn.style.background = "linear-gradient(135deg, #FF6F00, #FFA000)";
+    }
   }
 
   // --- Last Round Detection ---
   function isLastRoundVictory() {
     const btcp = document.getElementById("btcp");
     if (!btcp) return false;
-    // On last round: onclick="common.goto_arena()" and image is finishbattle.png
-    // On intermediate: onclick="battle.battle_continue()" and image is arenacontinue.png
     const onclick = btcp.getAttribute("onclick") || "";
     if (onclick.includes("goto_arena")) return true;
     const img = btcp.querySelector("img");
     if (img && img.src && img.src.includes("finishbattle")) return true;
     return false;
+  }
+
+  // ============================================================
+  // IMMEDIATE: Check for Riddle Master anti-cheat on page load
+  // ============================================================
+  if (isRiddleMaster() && GM_getValue("autoArena", false)) {
+    GM_setValue("autoArena", false);
+    // Small delay to ensure page is fully loaded for audio
+    setTimeout(() => {
+      alertUser("RIDDLE MASTER", "Anti-cheat detected! Answer the riddle!");
+    }, 500);
+    // Don't run the rest of the battle script on riddle page
+    return;
   }
 
   // --- UI Button ---
@@ -150,11 +222,6 @@
   }
 
   syncButton();
-
-  // Request notification permission early
-  if (typeof Notification !== "undefined" && Notification.permission === "default") {
-    Notification.requestPermission();
-  }
 
   function readState() {
     const hp = parseInt(document.getElementById("dvrhd")?.textContent) || 0;
@@ -218,9 +285,9 @@
   async function useItem(id) {
     if (!document.getElementById(id)) return false;
     document.getElementById("ckey_items")?.click();
-    await wait(500);
+    await wait(300);
     document.getElementById(id)?.click();
-    await wait(500);
+    await wait(300);
     document.getElementById("ckey_attack")?.click();
     await wait(300);
     return true;
@@ -230,9 +297,8 @@
     if (battleRunning) return;
     battleRunning = true;
 
-    // Track consecutive idle loops for anti-cheat detection
     let idleLoops = 0;
-    const MAX_IDLE_LOOPS = 10; // ~5 seconds of alive=0 without victory
+    const MAX_IDLE_LOOPS = 10;
 
     try {
       while (true) {
@@ -241,10 +307,8 @@
         const s = readState();
 
         if (s.victory) {
-          // Check if this is the LAST round
-          await wait(1000); // Wait for victory popup to fully render
+          await waitFor(() => document.getElementById("btcp"), 300, 3000);
           if (isLastRoundVictory()) {
-            // Last round - STOP, don't continue
             GM_setValue("autoArena", false);
             btn.textContent = "🏆 CLEARED!";
             btn.style.background = "linear-gradient(135deg, #FFD600, #FFAB00)";
@@ -252,34 +316,30 @@
             alertUser("CLEARED!", "Arena challenge completed!");
             return;
           }
-          // Intermediate round - continue to next wave
-          await wait(2000);
+          await wait(1500);
           unsafeWindow.battle?.battle_continue?.();
           return;
         }
 
         if (s.alive.length === 0) {
           idleLoops++;
-          // Anti-cheat detection: too many idle loops without victory
-          // This likely means an overlay/captcha appeared
           if (idleLoops >= MAX_IDLE_LOOPS) {
             GM_setValue("autoArena", false);
             alertUser("ANTI-CHEAT", "Intervention required! Battle stalled.");
             return;
           }
-          await wait(500);
+          await wait(300);
           continue;
         }
 
-        // Reset idle counter when monsters are alive (normal combat)
         idleLoops = 0;
 
         if (s.hpP < 50) {
           document.getElementById("qb3")?.click();
-          await wait(500);
+          await wait(300);
           if (readState().hpP < 50) {
             document.getElementById("qb4")?.click();
-            await wait(500);
+            await wait(300);
           }
           continue;
         }
@@ -302,7 +362,7 @@
 
         if ((s.buffs["Regen"] ?? 0) <= 3 && s.buffs["Regen"] !== 999) {
           document.getElementById("qb1")?.click();
-          await wait(500);
+          await wait(300);
           continue;
         }
 
@@ -311,7 +371,7 @@
           s.buffs["Heartseeker"] !== 999
         ) {
           document.getElementById("qb2")?.click();
-          await wait(500);
+          await wait(300);
           continue;
         }
 
@@ -325,14 +385,13 @@
         const target = s.elites.length > 0 ? s.elites[0] : s.alive[0];
         if (target) {
           document.getElementById("mkey_" + target)?.click();
-          await wait(500);
+          await wait(300);
         } else {
-          await wait(500);
+          await wait(300);
         }
       }
     } catch (e) {
       GM_setValue("autoArena", false);
-      // Unexpected error - could be anti-cheat or DOM change
       alertUser("ERROR", "Script stopped unexpectedly: " + e.message);
       console.error("AutoArena:", e);
     } finally {
@@ -359,17 +418,20 @@
     }
   });
 
-  setTimeout(() => {
+  (async () => {
     if (GM_getValue("autoArena", false)) {
-      if (isInBattle()) {
+      const found = await waitFor(
+        () => document.getElementById("ckey_attack"),
+        300,
+        5000,
+      );
+      if (found) {
         startBattle();
       } else {
-        // Auto was ON but we're not in battle anymore
-        // This likely means anti-cheat caused a page refresh/navigation
         GM_setValue("autoArena", false);
         syncButton();
         alertUser("STOPPED", "Auto was on but battle lost! Anti-cheat?");
       }
     }
-  }, 1500);
+  })();
 })();
