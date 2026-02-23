@@ -20,22 +20,45 @@
     document.body.innerText.substring(0, 500).includes("victorious");
 
   // --- Alert System ---
+  // Pre-create AudioContext on user click so it's not suspended later
+  let audioCtx = null;
+  document.addEventListener("click", () => {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } else if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+  }, { once: false });
+
   function playAlertSound() {
+    // Method 1: Web Audio API (preferred, louder)
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      // Play 3 loud beeps
-      for (let i = 0; i < 3; i++) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+
+      for (let i = 0; i < 5; i++) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
         osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 880; // High A note
-        gain.gain.value = 0.8;
-        osc.start(ctx.currentTime + i * 0.4);
-        osc.stop(ctx.currentTime + i * 0.4 + 0.2);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = i % 2 === 0 ? 880 : 660; // Alternating tones
+        gain.gain.value = 1.0;
+        osc.start(audioCtx.currentTime + i * 0.3);
+        osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
       }
     } catch (e) {
-      console.error("AutoArena: Audio alert failed", e);
+      console.error("AutoArena: Web Audio failed", e);
+    }
+
+    // Method 2: HTML Audio fallback (works even if AudioContext is blocked)
+    try {
+      const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczGj6NwN3PesJPJ4S3zt/FaFhRkLzW3LRiQTaGt9Xdv2xMS4u61NuzZUA7hLXV3bprSEiKu9fcsmZBOoW31d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZkA6hLXV3btqR0eKu9fcsmZAOoS11d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZj86g7XV3btqR0eKu9fcsGY+OYO11d27akdHirvX3LBmPjmDtdXdu2pHR4q719ywZj45g7XV3btpR0aJu9fbr2U9OIK01NusZkA6hLXU27xqR0eKutfcsmZAOoS11d27akdH");
+      audio.volume = 1.0;
+      audio.play().catch(() => {});
+    } catch (e) {
+      console.error("AutoArena: HTML Audio fallback failed", e);
     }
   }
 
@@ -209,7 +232,7 @@
 
     // Track consecutive idle loops for anti-cheat detection
     let idleLoops = 0;
-    const MAX_IDLE_LOOPS = 60; // ~30 seconds of alive=0 without victory
+    const MAX_IDLE_LOOPS = 10; // ~5 seconds of alive=0 without victory
 
     try {
       while (true) {
@@ -341,8 +364,11 @@
       if (isInBattle()) {
         startBattle();
       } else {
+        // Auto was ON but we're not in battle anymore
+        // This likely means anti-cheat caused a page refresh/navigation
         GM_setValue("autoArena", false);
         syncButton();
+        alertUser("STOPPED", "Auto was on but battle lost! Anti-cheat?");
       }
     }
   }, 1500);

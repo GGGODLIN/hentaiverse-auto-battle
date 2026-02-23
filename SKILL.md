@@ -252,7 +252,7 @@ battle.battle_continue()  // Source: function(){S||(S=!0,document.location+="")}
 4. **No CD check on items**: Script loops infinitely opening/closing items panel when potion is on CD because element doesn't exist but script keeps retrying.
 
 ## Anti-Cheat Detection
-When anti-cheat triggers, it likely overlays the battle screen, causing `alive.length === 0` without `victorious` text appearing. The script detects this by counting consecutive idle loops (alive=0, no victory). After 60 loops (~30 seconds), it triggers an alert.
+When anti-cheat triggers, it likely overlays the battle screen, causing `alive.length === 0` without `victorious` text appearing. The script detects this by counting consecutive idle loops (alive=0, no victory). After 10 loops (~5 seconds), it triggers an alert.
 
 **Alert system:**
 - **Sound**: 3 loud beeps via Web Audio API (880Hz, 0.8 gain)
