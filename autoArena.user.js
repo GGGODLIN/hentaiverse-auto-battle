@@ -469,6 +469,14 @@
             if (readState().hpP < 50) {
               await useItem("ikey_3");
             }
+            if (readState().hpP < 50) {
+              GM_setValue("autoArena", false);
+              alertUser(
+                "LOW HP",
+                "All heals on CD! Manual intervention needed.",
+              );
+              return;
+            }
             continue;
           }
 
@@ -478,7 +486,7 @@
             continue;
           }
 
-          if (s.mpP < 20) {
+          if (s.mpP < 30) {
             if (await useItem("ikey_4")) continue;
           }
 
