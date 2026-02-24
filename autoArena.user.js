@@ -241,56 +241,6 @@
       }
     }
 
-    function showOverlayAlert(title, body) {
-      document.getElementById("autoArenaOverlay")?.remove();
-
-      const overlay = document.createElement("div");
-      overlay.id = "autoArenaOverlay";
-      Object.assign(overlay.style, {
-        position: "fixed",
-        top: "0",
-        left: "0",
-        width: "100vw",
-        height: "100vh",
-        zIndex: "999999",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(200, 0, 0, 0.85)",
-        color: "#fff",
-        fontFamily: "'Segoe UI', Arial, sans-serif",
-        cursor: "pointer",
-      });
-
-      overlay.innerHTML = `
-        <div style="font-size: 64px; margin-bottom: 20px;">🚨</div>
-        <div style="font-size: 36px; font-weight: bold; margin-bottom: 12px;">${title}</div>
-        <div style="font-size: 20px; margin-bottom: 30px;">${body}</div>
-        <div style="font-size: 14px; opacity: 0.7;">Click anywhere to dismiss</div>
-      `;
-
-      let flash = true;
-      const flashInterval = setInterval(() => {
-        overlay.style.background = flash
-          ? "rgba(200, 0, 0, 0.85)"
-          : "rgba(255, 140, 0, 0.85)";
-        flash = !flash;
-      }, 500);
-
-      overlay.addEventListener("click", () => {
-        clearInterval(flashInterval);
-        overlay.remove();
-      });
-
-      document.body.appendChild(overlay);
-
-      setTimeout(() => {
-        clearInterval(flashInterval);
-        overlay.remove();
-      }, 60000);
-    }
-
     let titleFlashInterval = null;
     function flashTitle(msg) {
       const originalTitle = document.title;
@@ -307,10 +257,27 @@
       }, 60000);
     }
 
+    if (
+      typeof Notification !== "undefined" &&
+      Notification.permission === "default"
+    ) {
+      Notification.requestPermission();
+    }
+
+    function sendNotification(title, body) {
+      try {
+        if (Notification.permission === "granted") {
+          new Notification(title, { body });
+        }
+      } catch (e) {
+        console.error("AutoArena: Notification failed", e);
+      }
+    }
+
     function alertUser(title, body) {
       playAlertSound();
-      showOverlayAlert(title, body);
       flashTitle(title);
+      sendNotification(title, body);
       if (document.getElementById("autoArenaBtn")) {
         btn.textContent = "🚨 " + title;
         btn.style.background = "linear-gradient(135deg, #FF6F00, #FFA000)";
