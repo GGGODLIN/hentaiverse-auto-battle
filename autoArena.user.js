@@ -469,6 +469,12 @@
             continue;
           }
 
+          if (s.buffs["Channeling"] && s.buffs["Heartseeker"] !== 999) {
+            document.getElementById("qb2")?.click();
+            await wait(300);
+            continue;
+          }
+
           if (s.mpP < 20) {
             if (await useItem("ikey_4")) continue;
           }
