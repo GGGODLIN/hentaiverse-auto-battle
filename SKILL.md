@@ -35,7 +35,7 @@ Both modes share GM storage (single script, single `@namespace`):
 
 ## Combat Priority Order
 
-1. HP < 50% → Heal (qb3, then qb4 if still low)
+1. HP < 50% → Heal (qb3 → qb4 → Health Potion if still low)
 2. **Channeling buff active** + Heartseeker not autocast → Cast Heartseeker (qb2) — free MP
 3. MP < 20% → Mana potion (ikey_4) — skip if on CD
 4. No Regeneration buff → Use potion (ikey_1) — skip if on CD
@@ -77,10 +77,11 @@ Both modes share GM storage (single script, single `@namespace`):
 ### Item Keys & Cooldown Detection
 | Element | Item |
 |---------|------|
-| `#ikey_1` | Regeneration potion |
-| `#ikey_2` | Replenishment potion |
-| `#ikey_4` | Mana potion |
-| `#ikey_5` | Refreshment potion |
+| `#ikey_1` | Health Draught (Regeneration buff) |
+| `#ikey_2` | Mana Draught (Replenishment buff) |
+| `#ikey_3` | Health Potion (backup heal) |
+| `#ikey_4` | Mana Potion |
+| `#ikey_5` | Spirit Draught (Refreshment buff) |
 
 **CD Detection**: When an item is on cooldown, its DOM element (`#ikey_N`) is completely removed from the page. `useItem()` returns `false` when the element doesn't exist.
 

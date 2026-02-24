@@ -466,6 +466,9 @@
               document.getElementById("qb4")?.click();
               await wait(300);
             }
+            if (readState().hpP < 50) {
+              await useItem("ikey_3");
+            }
             continue;
           }
 

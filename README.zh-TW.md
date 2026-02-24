@@ -57,7 +57,7 @@
 |------|---------|
 | 1 | Health Draught |
 | 2 | Mana Draught |
-| 3 | （未使用） |
+| 3 | Health Potion |
 | 4 | Mana Potion |
 | 5 | Spirit Draught |
 
@@ -79,7 +79,7 @@
 
 | 優先序 | 條件 | 動作 |
 |--------|------|------|
-| 1 | HP < 50% | 治療（qb3，不夠再 qb4） |
+| 1 | HP < 50% | 治療（qb3 → qb4 → Health Potion） |
 | 2 | Channeling buff 存在 | 施放 Heartseeker（免 MP） |
 | 3 | MP < 20% | Mana Potion |
 | 4 | 無 Regeneration buff | Health Draught |

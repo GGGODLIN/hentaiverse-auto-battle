@@ -57,7 +57,7 @@ The script relies on fixed quick button and item slot positions. Configure your 
 |------|------|
 | 1 | Health Draught |
 | 2 | Mana Draught |
-| 3 | (unused) |
+| 3 | Health Potion |
 | 4 | Mana Potion |
 | 5 | Spirit Draught |
 
@@ -79,7 +79,7 @@ The script relies on fixed quick button and item slot positions. Configure your 
 
 | Priority | Condition | Action |
 |----------|-----------|--------|
-| 1 | HP < 50% | Heal (qb3, then qb4) |
+| 1 | HP < 50% | Heal (qb3 → qb4 → Health Potion) |
 | 2 | Channeling buff active | Cast Heartseeker (free MP) |
 | 3 | MP < 20% | Mana Potion |
 | 4 | No Regeneration buff | Health Draught |
