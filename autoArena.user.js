@@ -140,6 +140,53 @@
       startCountdown();
     }
 
+    let audioCtx = null;
+    document.addEventListener(
+      "click",
+      () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } else if (audioCtx.state === "suspended") {
+          audioCtx.resume();
+        }
+      },
+      { once: false },
+    );
+
+    function playAlertSound() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === "suspended") audioCtx.resume();
+        for (let i = 0; i < 5; i++) {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.frequency.value = i % 2 === 0 ? 880 : 660;
+          gain.gain.value = 1.0;
+          osc.start(audioCtx.currentTime + i * 0.3);
+          osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
+        }
+      } catch (e) {
+        console.error("AutoArena: Web Audio failed", e);
+      }
+    }
+
+    let battlePollInterval = null;
+
+    function startBattlePoll() {
+      if (battlePollInterval) clearInterval(battlePollInterval);
+      battlePollInterval = setInterval(() => {
+        if (!GM_getValue("autoArena", false)) {
+          clearInterval(battlePollInterval);
+          battlePollInterval = null;
+          playAlertSound();
+        }
+      }, 3000);
+    }
+
     function openEncounter(url) {
       if (!url) return;
       GM_setValue("autoArena", true);
@@ -154,6 +201,7 @@
       );
       const pane = document.getElementById("eventpane");
       if (pane) pane.style.display = "none";
+      startBattlePoll();
       scheduleRefresh(THIRTY_MIN);
     }
 
