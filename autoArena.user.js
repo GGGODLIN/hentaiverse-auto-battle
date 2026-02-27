@@ -397,6 +397,9 @@
       qb3: true,
       qb4: true,
       spirit: true,
+      qb7: true,
+      qb8: true,
+      qb9: true,
       ikey1: true,
       ikey2: true,
       ikey3: true,
@@ -409,6 +412,9 @@
       ikey3: "Health Potion",
       qb1: "Regen (qb1)",
       qb2: "Heartseeker (qb2)",
+      qb7: "Attack 1 (qb7)",
+      qb8: "Attack 2 (qb8)",
+      qb9: "Attack 3 (qb9)",
       ikey1: "Health Draught",
       ikey2: "Mana Draught",
       ikey4: "Mana Potion",
@@ -426,6 +432,9 @@
       "ikey4",
       "ikey5",
       "spirit",
+      "qb7",
+      "qb8",
+      "qb9",
     ];
 
     const isIsekai = !document.getElementById("dvrhd");
@@ -743,10 +752,39 @@
             await wait(300);
           }
 
-          const target = s.elites.length > 0 ? s.elites[0] : s.alive[0];
-          if (target) {
-            document.getElementById("mkey_" + target)?.click();
-            await wait(300);
+          const normalTarget = s.elites.length > 0 ? s.elites[0] : s.alive[0];
+          if (normalTarget) {
+            let usedSkill = false;
+            for (const qb of ["qb7", "qb8", "qb9"]) {
+              if (t[qb] && document.getElementById(qb)) {
+                let skillTarget;
+                if (s.elites.length > 0) {
+                  skillTarget = s.elites[0];
+                } else {
+                  skillTarget = s.alive[0];
+                  let bestHp = 0;
+                  for (const i of s.alive) {
+                    const m = document.getElementById("mkey_" + i);
+                    const hpImg = m?.querySelector('.chbd img[alt="health"]');
+                    const hpW = parseInt(hpImg?.style.width) || 0;
+                    if (hpW > bestHp) {
+                      bestHp = hpW;
+                      skillTarget = i;
+                    }
+                  }
+                }
+                document.getElementById(qb).click();
+                await wait(300);
+                document.getElementById("mkey_" + skillTarget)?.click();
+                await wait(300);
+                usedSkill = true;
+                break;
+              }
+            }
+            if (!usedSkill) {
+              document.getElementById("mkey_" + normalTarget)?.click();
+              await wait(300);
+            }
           } else {
             await wait(300);
           }
