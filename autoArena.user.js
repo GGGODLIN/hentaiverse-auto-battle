@@ -517,10 +517,6 @@
     });
 
     function readState() {
-      const hp = parseInt(document.getElementById("dvrhd")?.textContent) || 0;
-      const mp = parseInt(document.getElementById("dvrm")?.textContent) || 0;
-      const sp = parseInt(document.getElementById("dvrs")?.textContent) || 0;
-      const oc = parseInt(document.getElementById("dvrc")?.textContent) || 0;
       const hpW =
         parseInt(document.querySelector("#dvbh img")?.style.width) || 1;
       const mpW =
@@ -529,10 +525,29 @@
         parseInt(document.querySelector("#dvbs img")?.style.width) || 1;
       const ocW =
         parseInt(document.querySelector("#dvbc img")?.style.width) || 1;
-      const mxHP = Math.round(hp / (hpW / 414));
-      const mxMP = Math.round(mp / (mpW / 414));
-      const mxSP = Math.round(sp / (spW / 414));
-      const mxOC = Math.round(oc / (ocW / 414));
+
+      const isIsekai = !document.getElementById("dvrhd");
+      let hpP, mpP, spP, ocP;
+
+      if (isIsekai) {
+        hpP = Math.round((hpW / 414) * 100);
+        mpP = Math.round((mpW / 414) * 100);
+        spP = Math.round((spW / 414) * 100);
+        ocP = Math.round((ocW / 414) * 100);
+      } else {
+        const hp = parseInt(document.getElementById("dvrhd").textContent) || 0;
+        const mp = parseInt(document.getElementById("dvrm").textContent) || 0;
+        const sp = parseInt(document.getElementById("dvrs").textContent) || 0;
+        const oc = parseInt(document.getElementById("dvrc").textContent) || 0;
+        const mxHP = Math.round(hp / (hpW / 414));
+        const mxMP = Math.round(mp / (mpW / 414));
+        const mxSP = Math.round(sp / (spW / 414));
+        const mxOC = Math.round(oc / (ocW / 414));
+        hpP = Math.round((hp / mxHP) * 100);
+        mpP = Math.round((mp / mxMP) * 100);
+        spP = Math.round((sp / mxSP) * 100);
+        ocP = Math.round((oc / mxOC) * 100);
+      }
 
       const alive = [];
       const elites = [];
@@ -567,10 +582,10 @@
         document.getElementById("ckey_spirit")?.getAttribute("src") ?? "";
 
       return {
-        hpP: Math.round((hp / mxHP) * 100),
-        mpP: Math.round((mp / mxMP) * 100),
-        spP: Math.round((sp / mxSP) * 100),
-        ocP: Math.round((oc / mxOC) * 100),
+        hpP,
+        mpP,
+        spP,
+        ocP,
         alive,
         elites,
         buffs,
