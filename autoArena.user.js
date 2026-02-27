@@ -428,15 +428,21 @@
       "spirit",
     ];
 
+    const isIsekai = !document.getElementById("dvrhd");
+    const profileKey = isIsekai
+      ? "battleToggles_isekai"
+      : "battleToggles_normal";
+    const profileLabel = isIsekai ? "Isekai" : "Normal";
+
     function getToggles() {
-      const saved = GM_getValue("battleToggles", {});
+      const saved = GM_getValue(profileKey, {});
       return { ...DEFAULT_TOGGLES, ...saved };
     }
 
     function setToggle(key, val) {
       const t = getToggles();
       t[key] = val;
-      GM_setValue("battleToggles", t);
+      GM_setValue(profileKey, t);
     }
 
     const gearBtn = document.createElement("div");
@@ -458,7 +464,7 @@
       background: "linear-gradient(135deg, #37474F, #546E7A)",
       color: "#fff",
     });
-    gearBtn.textContent = "⚙";
+    gearBtn.textContent = "\u2699";
     document.body.appendChild(gearBtn);
 
     const panel = document.createElement("div");
@@ -483,6 +489,18 @@
     function renderPanel() {
       const t = getToggles();
       panel.innerHTML = "";
+
+      const header = document.createElement("div");
+      Object.assign(header.style, {
+        fontSize: "11px",
+        opacity: "0.6",
+        marginBottom: "6px",
+        borderBottom: "1px solid rgba(255,255,255,0.15)",
+        paddingBottom: "4px",
+      });
+      header.textContent = "\uD83C\uDFAE " + profileLabel + " Profile";
+      panel.appendChild(header);
+
       TOGGLE_ORDER.forEach((key) => {
         const row = document.createElement("div");
         Object.assign(row.style, {
@@ -497,7 +515,7 @@
         label.textContent = TOGGLE_LABELS[key];
         label.style.opacity = t[key] ? "1" : "0.4";
         const dot = document.createElement("span");
-        dot.textContent = t[key] ? "🟢" : "🔴";
+        dot.textContent = t[key] ? "\uD83D\uDFE2" : "\uD83D\uDD34";
         dot.style.fontSize = "10px";
         dot.style.marginLeft = "8px";
         row.appendChild(label);
