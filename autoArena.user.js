@@ -391,6 +391,131 @@
 
     syncButton();
 
+    const DEFAULT_TOGGLES = {
+      qb1: true,
+      qb2: true,
+      qb3: true,
+      qb4: true,
+      spirit: true,
+      ikey1: true,
+      ikey2: true,
+      ikey3: true,
+      ikey4: true,
+      ikey5: true,
+    };
+    const TOGGLE_LABELS = {
+      qb3: "Heal 1 (qb3)",
+      qb4: "Heal 2 (qb4)",
+      ikey3: "Health Potion",
+      qb1: "Regen (qb1)",
+      qb2: "Heartseeker (qb2)",
+      ikey1: "Health Draught",
+      ikey2: "Mana Draught",
+      ikey4: "Mana Potion",
+      ikey5: "Spirit Draught",
+      spirit: "Spirit Stance",
+    };
+    const TOGGLE_ORDER = [
+      "qb3",
+      "qb4",
+      "ikey3",
+      "qb1",
+      "qb2",
+      "ikey1",
+      "ikey2",
+      "ikey4",
+      "ikey5",
+      "spirit",
+    ];
+
+    function getToggles() {
+      const saved = GM_getValue("battleToggles", {});
+      return { ...DEFAULT_TOGGLES, ...saved };
+    }
+
+    function setToggle(key, val) {
+      const t = getToggles();
+      t[key] = val;
+      GM_setValue("battleToggles", t);
+    }
+
+    const gearBtn = document.createElement("div");
+    Object.assign(gearBtn.style, {
+      position: "fixed",
+      bottom: "20px",
+      right: "160px",
+      padding: "10px 14px",
+      borderRadius: "24px",
+      cursor: "pointer",
+      zIndex: "99999",
+      fontFamily: "'Segoe UI', Arial, sans-serif",
+      fontSize: "14px",
+      fontWeight: "bold",
+      userSelect: "none",
+      transition: "all 0.3s ease",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+      border: "2px solid rgba(255,255,255,0.2)",
+      background: "linear-gradient(135deg, #37474F, #546E7A)",
+      color: "#fff",
+    });
+    gearBtn.textContent = "⚙";
+    document.body.appendChild(gearBtn);
+
+    const panel = document.createElement("div");
+    Object.assign(panel.style, {
+      position: "fixed",
+      bottom: "60px",
+      right: "20px",
+      padding: "12px 16px",
+      borderRadius: "12px",
+      zIndex: "99998",
+      fontFamily: "'Segoe UI', Arial, sans-serif",
+      fontSize: "13px",
+      background: "rgba(30, 30, 30, 0.95)",
+      color: "#fff",
+      boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+      border: "1px solid rgba(255,255,255,0.15)",
+      display: "none",
+      minWidth: "180px",
+    });
+    document.body.appendChild(panel);
+
+    function renderPanel() {
+      const t = getToggles();
+      panel.innerHTML = "";
+      TOGGLE_ORDER.forEach((key) => {
+        const row = document.createElement("div");
+        Object.assign(row.style, {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "4px 0",
+          cursor: "pointer",
+          userSelect: "none",
+        });
+        const label = document.createElement("span");
+        label.textContent = TOGGLE_LABELS[key];
+        label.style.opacity = t[key] ? "1" : "0.4";
+        const dot = document.createElement("span");
+        dot.textContent = t[key] ? "🟢" : "🔴";
+        dot.style.fontSize = "10px";
+        dot.style.marginLeft = "8px";
+        row.appendChild(label);
+        row.appendChild(dot);
+        row.addEventListener("click", () => {
+          setToggle(key, !t[key]);
+          renderPanel();
+        });
+        panel.appendChild(row);
+      });
+    }
+
+    gearBtn.addEventListener("click", () => {
+      const visible = panel.style.display !== "none";
+      panel.style.display = visible ? "none" : "block";
+      if (!visible) renderPanel();
+    });
+
     function readState() {
       const hp = parseInt(document.getElementById("dvrhd")?.textContent) || 0;
       const mp = parseInt(document.getElementById("dvrm")?.textContent) || 0;
@@ -507,17 +632,21 @@
 
           idleLoops = 0;
 
-          if (s.hpP < 50) {
-            document.getElementById("qb3")?.click();
-            await wait(300);
-            if (readState().hpP < 50) {
+          const t = getToggles();
+
+          if (s.hpP < 50 && (t.qb3 || t.qb4 || t.ikey3)) {
+            if (t.qb3) {
+              document.getElementById("qb3")?.click();
+              await wait(300);
+            }
+            if (readState().hpP < 50 && t.qb4) {
               document.getElementById("qb4")?.click();
               await wait(300);
             }
-            if (readState().hpP < 50) {
+            if (readState().hpP < 50 && t.ikey3) {
               await useItem("ikey_3");
             }
-            if (readState().hpP < 50) {
+            if (readState().hpP < 50 && t.qb3 && t.qb4 && t.ikey3) {
               GM_setValue("autoArena", false);
               alertUser(
                 "LOW HP",
@@ -525,38 +654,47 @@
               );
               return;
             }
-            continue;
+            if (readState().hpP >= 50) continue;
           }
 
-          if (s.buffs["Channeling"] && s.buffs["Heartseeker"] !== 999) {
+          if (
+            t.qb2 &&
+            s.buffs["Channeling"] &&
+            s.buffs["Heartseeker"] !== 999
+          ) {
             document.getElementById("qb2")?.click();
             await wait(300);
             continue;
           }
 
-          if (s.mpP < 30) {
+          if (t.ikey4 && s.mpP < 30) {
             if (await useItem("ikey_4")) continue;
           }
 
-          if (!s.buffs["Regeneration"]) {
+          if (t.ikey1 && !s.buffs["Regeneration"]) {
             if (await useItem("ikey_1")) continue;
           }
 
-          if (!s.buffs["Replenishment"]) {
+          if (t.ikey2 && !s.buffs["Replenishment"]) {
             if (await useItem("ikey_2")) continue;
           }
 
-          if (s.spP < 70 && !s.buffs["Refreshment"]) {
+          if (t.ikey5 && s.spP < 70 && !s.buffs["Refreshment"]) {
             if (await useItem("ikey_5")) continue;
           }
 
-          if ((s.buffs["Regen"] ?? 0) <= 3 && s.buffs["Regen"] !== 999) {
+          if (
+            t.qb1 &&
+            (s.buffs["Regen"] ?? 0) <= 3 &&
+            s.buffs["Regen"] !== 999
+          ) {
             document.getElementById("qb1")?.click();
             await wait(300);
             continue;
           }
 
           if (
+            t.qb2 &&
             (s.buffs["Heartseeker"] ?? 0) <= 3 &&
             s.buffs["Heartseeker"] !== 999
           ) {
@@ -565,7 +703,7 @@
             continue;
           }
 
-          if (s.ocP > 80 && !s.spiritActive && s.alive.length > 0) {
+          if (t.spirit && s.ocP > 80 && !s.spiritActive && s.alive.length > 0) {
             document.getElementById("ckey_spirit")?.click();
             await wait(300);
             document.getElementById("ckey_attack")?.click();
