@@ -2,7 +2,7 @@
 
 # HV Auto Battle & Encounter
 
-用於自動化 HentaiVerse 競技場戰鬥與 E-Hentai 遭遇戰農怪的 Tampermonkey 腳本。
+用於自動化 HentaiVerse 競技場戰鬥與 E-Hentai 遭遇戰農怪的 Tampermonkey 腳本。支援一般模式和異世界模式。
 
 ## 功能
 
@@ -11,9 +11,11 @@
 - 波次之間自動續戰
 - **最後一波自動停下** — 不會跳離結算畫面
 - 精英/Boss 優先攻擊
-- 冷卻偵測 — 藥水 CD 中自動跳過
+- 冷卻偵測 — 技能與藥水 CD 中自動跳過
 - Channeling buff 偵測 — 觸發時趁免 MP 施放 Heartseeker
 - Spirit stance 自動管理
+- **設定面板** — 可單獨開關每個技能和藥水
+- **異世界模式** — 自動偵測並使用獨立設定檔
 
 ### 🎯 遭遇戰自動刷新（`e-hentai.org/news.php`）
 - 每 30 分鐘定時刷新頁面
@@ -21,10 +23,12 @@
 - 自動在彈出視窗中啟用戰鬥模式
 - 浮動按鈕顯示倒數計時
 - 超過 30 分鐘未出現遭遇時，改為每 1 分鐘重試
+- 戰鬥結束時從 news.php 播放警報音（繞過彈出視窗自動播放限制）
 
 ### 🚨 反作弊保護
 - **Riddle Master** 頁面載入時立即偵測
 - **怠速偵測** — 戰鬥卡住時觸發
+- **低血量** — 所有補血手段都在 CD 時停止
 - **三重警報**：蜂鳴聲 + 瀏覽器通知 + 分頁標題閃爍
 
 ## 安裝
@@ -48,6 +52,9 @@
 | qb2 | Heartseeker（命中 buff） |
 | qb3 | 治療術 1 |
 | qb4 | 治療術 2 |
+| qb7 | 攻擊技能 1 |
+| qb8 | 攻擊技能 2 |
+| qb9 | 攻擊技能 3 |
 
 ### 物品欄（Item Slots）
 
@@ -66,8 +73,9 @@
 ### 競技場戰鬥
 1. 在 `hentaiverse.org` 進入競技場戰鬥
 2. 點擊右下角 `⚔ AUTO OFF` 按鈕開始
-3. 腳本自動戰鬥並在波次間自動續戰
-4. 競技場通關或偵測到反作弊時自動停止
+3. 點擊 `⚙` 按鈕開啟設定 — 依需求開關技能和藥水
+4. 腳本自動戰鬥並在波次間自動續戰
+5. 競技場通關或偵測到反作弊時自動停止
 
 ### 遭遇戰農怪
 1. 前往 `e-hentai.org/news.php`
@@ -75,20 +83,33 @@
 3. 按鈕顯示倒數計時至下次刷新
 4. 偵測到怪物遭遇時自動開啟戰鬥並開打
 
+### 設定面板
+
+點擊 `⚙` 開啟。自動偵測一般/異世界模式，使用獨立設定檔。
+
+每個技能和藥水都可以單獨開關：
+- 🟢 啟用 — 戰鬥中會使用
+- 🔴 關閉 — 完全跳過
+
+設定狀態會跨頁面保存。
+
 ## 戰鬥優先順序
 
 | 優先序 | 條件 | 動作 |
 |--------|------|------|
 | 1 | HP < 50% | 治療（qb3 → qb4 → Health Potion） |
 | 2 | Channeling buff 存在 | 施放 Heartseeker（免 MP） |
-| 3 | MP < 20% | Mana Potion |
+| 3 | MP < 30% | Mana Potion |
 | 4 | 無 Regeneration buff | Health Draught |
 | 5 | 無 Replenishment buff | Mana Draught |
 | 6 | SP < 70% 且無 Refreshment | Spirit Draught |
 | 7 | Regen ≤ 3 回合 | 重新施放 |
 | 8 | Heartseeker ≤ 3 回合 | 重新施放 |
 | 9 | OC > 80% 且 spirit 未啟動 | 啟動 spirit stance |
-| 10 | — | 攻擊（精英優先） |
+| 10 | — | 攻擊技能（qb7→qb8→qb9）或普攻 |
+
+**攻擊技能目標**：精英優先，再來最高血量怪物
+**普攻目標**：精英優先，再來第一隻活著的怪物
 
 ## GM Storage Keys
 
@@ -98,6 +119,8 @@
 | `autoEncounter` | 遭遇戰模式 | 自動刷新開關 |
 | `lastEncounterTime` | 遭遇戰模式 | 上次遭遇的時間戳 |
 | `nextRefreshTime` | 遭遇戰模式 | 下次刷新的目標時間 |
+| `battleToggles_normal` | 戰鬥模式 | 一般模式開關狀態 |
+| `battleToggles_isekai` | 戰鬥模式 | 異世界模式開關狀態 |
 
 ## License
 
