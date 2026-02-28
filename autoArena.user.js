@@ -405,6 +405,7 @@
       ikey3: true,
       ikey4: true,
       ikey5: true,
+      sparkOfLife: false,
     };
     const TOGGLE_LABELS = {
       qb3: "Heal 1 (qb3)",
@@ -420,6 +421,7 @@
       ikey4: "Mana Potion",
       ikey5: "Spirit Draught",
       spirit: "Spirit Stance",
+      sparkOfLife: "Spark of Life",
     };
     const TOGGLE_ORDER = [
       "qb3",
@@ -435,6 +437,7 @@
       "qb7",
       "qb8",
       "qb9",
+      "sparkOfLife",
     ];
 
     const isIsekai = !document.getElementById("dvrhd");
@@ -675,6 +678,12 @@
           idleLoops = 0;
 
           const t = getToggles();
+
+          if (t.sparkOfLife && !s.buffs["Spark of Life"]) {
+            GM_setValue("autoArena", false);
+            alertUser("SPARK LOST", "Spark of Life disappeared!");
+            return;
+          }
 
           if (s.hpP < 50 && (t.qb3 || t.qb4 || t.ikey3)) {
             if (t.qb3) {
