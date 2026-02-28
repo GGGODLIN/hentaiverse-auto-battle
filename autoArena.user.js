@@ -406,6 +406,11 @@
       ikey4: true,
       ikey5: true,
       sparkOfLife: false,
+      hpThreshold: 50,
+      mpThreshold: 30,
+      spThreshold: 70,
+      ocThreshold: 80,
+      channelingSkill: "qb2",
     };
     const TOGGLE_LABELS = {
       qb3: "Heal 1 (qb3)",
@@ -538,6 +543,102 @@
         });
         panel.appendChild(row);
       });
+
+      const sep1 = document.createElement("div");
+      Object.assign(sep1.style, {
+        borderTop: "1px solid rgba(255,255,255,0.15)",
+        marginTop: "6px",
+        paddingTop: "6px",
+        fontSize: "11px",
+        opacity: "0.6",
+      });
+      sep1.textContent = "Thresholds";
+      panel.appendChild(sep1);
+
+      const thresholds = [
+        { key: "hpThreshold", label: "HP Heal" },
+        { key: "mpThreshold", label: "MP Potion" },
+        { key: "spThreshold", label: "SP Draught" },
+        { key: "ocThreshold", label: "OC Spirit" },
+      ];
+      thresholds.forEach(({ key, label }) => {
+        const row = document.createElement("div");
+        Object.assign(row.style, {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "4px 0",
+          userSelect: "none",
+        });
+        const lbl = document.createElement("span");
+        lbl.textContent = label;
+        const ctrl = document.createElement("span");
+        Object.assign(ctrl.style, {
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+        });
+        const minus = document.createElement("span");
+        minus.textContent = "-";
+        minus.style.cursor = "pointer";
+        minus.style.padding = "0 4px";
+        minus.addEventListener("click", () => {
+          setToggle(key, Math.max(0, (t[key] ?? DEFAULT_TOGGLES[key]) - 5));
+          renderPanel();
+        });
+        const val = document.createElement("span");
+        val.textContent = (t[key] ?? DEFAULT_TOGGLES[key]) + "%";
+        val.style.minWidth = "32px";
+        val.style.textAlign = "center";
+        const plus = document.createElement("span");
+        plus.textContent = "+";
+        plus.style.cursor = "pointer";
+        plus.style.padding = "0 4px";
+        plus.addEventListener("click", () => {
+          setToggle(key, Math.min(100, (t[key] ?? DEFAULT_TOGGLES[key]) + 5));
+          renderPanel();
+        });
+        ctrl.appendChild(minus);
+        ctrl.appendChild(val);
+        ctrl.appendChild(plus);
+        row.appendChild(lbl);
+        row.appendChild(ctrl);
+        panel.appendChild(row);
+      });
+
+      const sep2 = document.createElement("div");
+      Object.assign(sep2.style, {
+        borderTop: "1px solid rgba(255,255,255,0.15)",
+        marginTop: "6px",
+        paddingTop: "6px",
+      });
+      const chRow = document.createElement("div");
+      Object.assign(chRow.style, {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        cursor: "pointer",
+        userSelect: "none",
+      });
+      const chLabel = document.createElement("span");
+      chLabel.textContent = "Channeling";
+      const chVal = document.createElement("span");
+      chVal.textContent = t.channelingSkill ?? "qb2";
+      chVal.style.opacity = "0.8";
+      chRow.appendChild(chLabel);
+      chRow.appendChild(chVal);
+      const skillOptions = ["qb1", "qb2", "qb3", "qb4"];
+      chRow.addEventListener("click", () => {
+        const cur = t.channelingSkill ?? "qb2";
+        const idx = skillOptions.indexOf(cur);
+        setToggle(
+          "channelingSkill",
+          skillOptions[(idx + 1) % skillOptions.length],
+        );
+        renderPanel();
+      });
+      sep2.appendChild(chRow);
+      panel.appendChild(sep2);
     }
 
     gearBtn.addEventListener("click", () => {
@@ -685,19 +786,24 @@
             return;
           }
 
-          if (s.hpP < 50 && (t.qb3 || t.qb4 || t.ikey3)) {
+          if (s.hpP < (t.hpThreshold ?? 50) && (t.qb3 || t.qb4 || t.ikey3)) {
             if (t.qb3) {
               document.getElementById("qb3")?.click();
               await wait(300);
             }
-            if (readState().hpP < 50 && t.qb4) {
+            if (readState().hpP < (t.hpThreshold ?? 50) && t.qb4) {
               document.getElementById("qb4")?.click();
               await wait(300);
             }
-            if (readState().hpP < 50 && t.ikey3) {
+            if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
             }
-            if (readState().hpP < 50 && t.qb3 && t.qb4 && t.ikey3) {
+            if (
+              readState().hpP < (t.hpThreshold ?? 50) &&
+              t.qb3 &&
+              t.qb4 &&
+              t.ikey3
+            ) {
               GM_setValue("autoArena", false);
               alertUser(
                 "LOW HP",
@@ -705,20 +811,19 @@
               );
               return;
             }
-            if (readState().hpP >= 50) continue;
+            if (readState().hpP >= (t.hpThreshold ?? 50)) continue;
           }
 
-          if (
-            t.qb2 &&
-            s.buffs["Channeling"] &&
-            s.buffs["Heartseeker"] !== 999
-          ) {
-            document.getElementById("qb2")?.click();
-            await wait(300);
-            continue;
+          if (s.buffs["Channeling"]) {
+            const chSkill = t.channelingSkill ?? "qb2";
+            if (t[chSkill] && document.getElementById(chSkill)) {
+              document.getElementById(chSkill).click();
+              await wait(300);
+              continue;
+            }
           }
 
-          if (t.ikey4 && s.mpP < 30) {
+          if (t.ikey4 && s.mpP < (t.mpThreshold ?? 30)) {
             if (await useItem("ikey_4")) continue;
           }
 
@@ -730,7 +835,11 @@
             if (await useItem("ikey_2")) continue;
           }
 
-          if (t.ikey5 && s.spP < 70 && !s.buffs["Refreshment"]) {
+          if (
+            t.ikey5 &&
+            s.spP < (t.spThreshold ?? 70) &&
+            !s.buffs["Refreshment"]
+          ) {
             if (await useItem("ikey_5")) continue;
           }
 
@@ -754,7 +863,12 @@
             continue;
           }
 
-          if (t.spirit && s.ocP > 80 && !s.spiritActive && s.alive.length > 0) {
+          if (
+            t.spirit &&
+            s.ocP > (t.ocThreshold ?? 80) &&
+            !s.spiritActive &&
+            s.alive.length > 0
+          ) {
             document.getElementById("ckey_spirit")?.click();
             await wait(300);
             document.getElementById("ckey_attack")?.click();
