@@ -405,6 +405,7 @@
       ikey3: true,
       ikey4: true,
       ikey5: true,
+      ikeyP: true,
       sparkOfLife: false,
       hpThreshold: 50,
       mpThreshold: 30,
@@ -425,6 +426,7 @@
       ikey2: "Mana Draught",
       ikey4: "Mana Potion",
       ikey5: "Spirit Draught",
+      ikeyP: "Pickup Item",
       spirit: "Spirit Stance",
       sparkOfLife: "Spark of Life",
     };
@@ -438,6 +440,7 @@
       "ikey2",
       "ikey4",
       "ikey5",
+      "ikeyP",
       "spirit",
       "qb7",
       "qb8",
@@ -821,6 +824,10 @@
               await wait(300);
               continue;
             }
+          }
+
+          if (t.ikeyP && document.getElementById("ikey_p")) {
+            if (await useItem("ikey_p")) continue;
           }
 
           if (t.ikey4 && s.mpP < (t.mpThreshold ?? 30)) {
