@@ -685,7 +685,7 @@
 
       const alive = [];
       const elites = [];
-      for (let i = 1; i <= 50; i++) {
+      for (let i = 0; i <= 50; i++) {
         const m = document.getElementById("mkey_" + i);
         if (
           m &&
@@ -853,9 +853,10 @@
           if (
             t.qb1 &&
             (s.buffs["Regen"] ?? 0) <= 3 &&
-            s.buffs["Regen"] !== 999
+            s.buffs["Regen"] !== 999 &&
+            document.getElementById("qb1")
           ) {
-            document.getElementById("qb1")?.click();
+            document.getElementById("qb1").click();
             await wait(300);
             continue;
           }
@@ -863,9 +864,10 @@
           if (
             t.qb2 &&
             (s.buffs["Heartseeker"] ?? 0) <= 3 &&
-            s.buffs["Heartseeker"] !== 999
+            s.buffs["Heartseeker"] !== 999 &&
+            document.getElementById("qb2")
           ) {
-            document.getElementById("qb2")?.click();
+            document.getElementById("qb2").click();
             await wait(300);
             continue;
           }
@@ -883,7 +885,7 @@
           }
 
           const normalTarget = s.elites.length > 0 ? s.elites[0] : s.alive[0];
-          if (normalTarget) {
+          if (normalTarget != null) {
             let usedSkill = false;
             for (const qb of ["qb7", "qb8", "qb9"]) {
               if (t[qb] && document.getElementById(qb)) {
