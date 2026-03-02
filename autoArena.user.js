@@ -783,10 +783,17 @@
 
           const t = getToggles();
 
-          if (t.sparkOfLife && !s.buffs["Spark of Life"]) {
-            GM_setValue("autoArena", false);
-            alertUser("SPARK LOST", "Spark of Life disappeared!");
-            return;
+          if (t.sparkOfLife) {
+            const hpBarSrc =
+              document.querySelector("#dvbh img")?.getAttribute("src") ?? "";
+            const sparkBuffGone = !s.buffs["Spark of Life"];
+            const sparkBarGone =
+              hpBarSrc.includes("bar_") && !hpBarSrc.includes("dgreen");
+            if (sparkBuffGone || sparkBarGone) {
+              GM_setValue("autoArena", false);
+              alertUser("SPARK LOST", "Spark of Life disappeared!");
+              return;
+            }
           }
 
           if (s.hpP < (t.hpThreshold ?? 50) && (t.qb3 || t.qb4 || t.ikey3)) {
