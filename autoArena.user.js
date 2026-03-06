@@ -257,22 +257,51 @@
       { once: false },
     );
 
-    function playAlertSound() {
+    function playAlertSound(isUrgent = false) {
       try {
         if (!audioCtx) {
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (audioCtx.state === "suspended") audioCtx.resume();
 
-        for (let i = 0; i < 5; i++) {
+        if (isUrgent) {
+          // Siren sound for urgent alerts (e.g. Anti-Cheat)
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.connect(gain);
           gain.connect(audioCtx.destination);
-          osc.frequency.value = i % 2 === 0 ? 880 : 660;
-          gain.gain.value = 1.0;
-          osc.start(audioCtx.currentTime + i * 0.3);
-          osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
+
+          osc.type = "square";
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+
+          for (let i = 0; i < 10; i++) {
+            osc.frequency.setValueAtTime(1200, audioCtx.currentTime + i * 0.4);
+            osc.frequency.setValueAtTime(
+              800,
+              audioCtx.currentTime + i * 0.4 + 0.2,
+            );
+          }
+
+          gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.01,
+            audioCtx.currentTime + 4,
+          );
+
+          osc.start(audioCtx.currentTime);
+          osc.stop(audioCtx.currentTime + 4);
+        } else {
+          // Standard beep for normal stops (e.g. Low HP, Spark Lost)
+          for (let i = 0; i < 5; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = i % 2 === 0 ? 880 : 660;
+            gain.gain.value = 1.0;
+            osc.start(audioCtx.currentTime + i * 0.3);
+            osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
+          }
         }
       } catch (e) {
         console.error("AutoArena: Web Audio failed", e);
@@ -322,8 +351,8 @@
       }
     }
 
-    function alertUser(title, body) {
-      playAlertSound();
+    function alertUser(title, body, isUrgent = false) {
+      playAlertSound(isUrgent);
       flashTitle(title);
       sendNotification(title, body);
       if (document.getElementById("autoArenaBtn")) {
@@ -797,7 +826,11 @@
             idleLoops++;
             if (idleLoops >= MAX_IDLE_LOOPS) {
               GM_setValue("autoArena", false);
-              alertUser("ANTI-CHEAT", "Intervention required! Battle stalled.");
+              alertUser(
+                "ANTI-CHEAT",
+                "Intervention required! RiddleMaster detected.",
+                true,
+              );
               return;
             }
             await wait(300);
@@ -1002,7 +1035,11 @@
         } else {
           GM_setValue("autoArena", false);
           syncButton();
-          alertUser("STOPPED", "Auto was on but battle lost! Anti-cheat?");
+          alertUser(
+            "STOPPED",
+            "Auto was on but battle lost! Anti-cheat?",
+            true,
+          );
         }
       }
     })();
