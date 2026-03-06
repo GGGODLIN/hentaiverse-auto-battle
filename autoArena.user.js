@@ -412,6 +412,7 @@
       spThreshold: 70,
       ocThreshold: 80,
       channelingSkill: "qb2",
+      targetStrategy: "focus",
     };
     const TOGGLE_LABELS = {
       qb3: "Heal 1 (qb3)",
@@ -641,6 +642,30 @@
         renderPanel();
       });
       sep2.appendChild(chRow);
+
+      const stratRow = document.createElement("div");
+      Object.assign(stratRow.style, {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        cursor: "pointer",
+        userSelect: "none",
+        marginTop: "4px",
+      });
+      const stratLabel = document.createElement("span");
+      stratLabel.textContent = "Target";
+      const stratVal = document.createElement("span");
+      const strat = t.targetStrategy ?? "focus";
+      stratVal.textContent = strat === "focus" ? "🎯 Focus" : "🔄 Spread";
+      stratVal.style.opacity = "0.8";
+      stratRow.appendChild(stratLabel);
+      stratRow.appendChild(stratVal);
+      stratRow.addEventListener("click", () => {
+        setToggle("targetStrategy", strat === "focus" ? "spread" : "focus");
+        renderPanel();
+      });
+      sep2.appendChild(stratRow);
+
       panel.appendChild(sep2);
     }
 
@@ -891,27 +916,36 @@
             await wait(300);
           }
 
-          const normalTarget = s.elites.length > 0 ? s.elites[0] : s.alive[0];
+          function getHighestHpTarget(monsters) {
+            let best = monsters[0];
+            let bestHp = 0;
+            for (const i of monsters) {
+              const m = document.getElementById("mkey_" + i);
+              const hpImg = m?.querySelector('.chbd img[alt="health"]');
+              const hpW = parseInt(hpImg?.style.width) || 0;
+              if (hpW > bestHp) {
+                bestHp = hpW;
+                best = i;
+              }
+            }
+            return best;
+          }
+
+          const isSpread = (t.targetStrategy ?? "focus") === "spread";
+          const normalTarget = isSpread
+            ? getHighestHpTarget(s.alive)
+            : s.elites.length > 0
+              ? s.elites[0]
+              : s.alive[0];
           if (normalTarget != null) {
             let usedSkill = false;
             for (const qb of ["qb7", "qb8", "qb9"]) {
               if (t[qb] && document.getElementById(qb)) {
-                let skillTarget;
-                if (s.elites.length > 0) {
-                  skillTarget = s.elites[0];
-                } else {
-                  skillTarget = s.alive[0];
-                  let bestHp = 0;
-                  for (const i of s.alive) {
-                    const m = document.getElementById("mkey_" + i);
-                    const hpImg = m?.querySelector('.chbd img[alt="health"]');
-                    const hpW = parseInt(hpImg?.style.width) || 0;
-                    if (hpW > bestHp) {
-                      bestHp = hpW;
-                      skillTarget = i;
-                    }
-                  }
-                }
+                const skillTarget = isSpread
+                  ? getHighestHpTarget(s.alive)
+                  : s.elites.length > 0
+                    ? s.elites[0]
+                    : getHighestHpTarget(s.alive);
                 document.getElementById(qb).click();
                 await wait(300);
                 document.getElementById("mkey_" + skillTarget)?.click();
