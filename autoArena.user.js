@@ -376,7 +376,11 @@
     if (isRiddleMaster() && GM_getValue("autoArena", false)) {
       GM_setValue("autoArena", false);
       setTimeout(() => {
-        alertUser("RIDDLE MASTER", "Anti-cheat detected! Answer the riddle!");
+        alertUser(
+          "RIDDLE MASTER",
+          "Anti-cheat detected! Answer the riddle!",
+          true,
+        );
       }, 500);
       return;
     }
