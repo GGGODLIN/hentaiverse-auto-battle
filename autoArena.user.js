@@ -153,21 +153,43 @@
       { once: false },
     );
 
-    function playAlertSound() {
+    function playAlertSound(isUrgent = false) {
       try {
         if (!audioCtx) {
           audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
         if (audioCtx.state === "suspended") audioCtx.resume();
-        for (let i = 0; i < 5; i++) {
+        if (isUrgent) {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
           osc.connect(gain);
           gain.connect(audioCtx.destination);
-          osc.frequency.value = i % 2 === 0 ? 880 : 660;
-          gain.gain.value = 1.0;
-          osc.start(audioCtx.currentTime + i * 0.3);
-          osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
+          osc.type = "square";
+          for (let i = 0; i < 10; i++) {
+            osc.frequency.setValueAtTime(1200, audioCtx.currentTime + i * 0.4);
+            osc.frequency.setValueAtTime(
+              800,
+              audioCtx.currentTime + i * 0.4 + 0.2,
+            );
+          }
+          gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.01,
+            audioCtx.currentTime + 4,
+          );
+          osc.start(audioCtx.currentTime);
+          osc.stop(audioCtx.currentTime + 4);
+        } else {
+          for (let i = 0; i < 5; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = i % 2 === 0 ? 880 : 660;
+            gain.gain.value = 1.0;
+            osc.start(audioCtx.currentTime + i * 0.3);
+            osc.stop(audioCtx.currentTime + i * 0.3 + 0.2);
+          }
         }
       } catch (e) {
         console.error("AutoArena: Web Audio failed", e);
@@ -182,7 +204,9 @@
         if (!GM_getValue("autoArena", false)) {
           clearInterval(battlePollInterval);
           battlePollInterval = null;
-          playAlertSound();
+          const reason = GM_getValue("battleStopReason", "");
+          playAlertSound(reason === "urgent");
+          GM_setValue("battleStopReason", "");
         }
       }, 3000);
     }
@@ -190,15 +214,9 @@
     function openEncounter(url) {
       if (!url) return;
       GM_setValue("autoArena", true);
+      GM_setValue("battleStopReason", "");
       GM_setValue("lastEncounterTime", Date.now());
-      window.open(
-        url,
-        "_hentaiverse",
-        "toolbar=0,scrollbars=0,location=0,statusbar=0,menubar=0,resizable=0,width=1250,height=720,left=" +
-          (screen.width - 1250) / 2 +
-          ",top=" +
-          (screen.height - 720) / 2,
-      );
+      window.open(url, "_blank");
       const pane = document.getElementById("eventpane");
       if (pane) pane.style.display = "none";
       startBattlePoll();
@@ -354,6 +372,7 @@
     }
 
     function alertUser(title, body, isUrgent = false) {
+      if (isUrgent) GM_setValue("battleStopReason", "urgent");
       playAlertSound(isUrgent);
       flashTitle(title);
       sendNotification(title, body);
