@@ -308,11 +308,13 @@
       }
 
       try {
-        const audio = new Audio(
-          "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczGj6NwN3PesJPJ4S3zt/FaFhRkLzW3LRiQTaGt9Xdv2xMS4u61NuzZUA7hLXV3bprSEiKu9fcsmZBOoW31d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZkA6hLXV3btqR0eKu9fcsmZAOoS11d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZj86g7XV3btqR0eKu9fcsGY+OYO11d27akdHirvX3LBmPjmDtdXdu2pHR4q719ywZj45g7XV3btpR0aJu9fbr2U9OIK01NusZkA6hLXU27xqR0eKutfcsmZAOoS11d27akdH",
-        );
-        audio.volume = 1.0;
-        audio.play().catch(() => {});
+        if (!isUrgent) {
+          const audio = new Audio(
+            "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbsGczGj6NwN3PesJPJ4S3zt/FaFhRkLzW3LRiQTaGt9Xdv2xMS4u61NuzZUA7hLXV3bprSEiKu9fcsmZBOoW31d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZkA6hLXV3btqR0eKu9fcsmZAOoS11d27akdHirvX3LJmQDqEtdXdu2pHR4q719yyZj86g7XV3btqR0eKu9fcsGY+OYO11d27akdHirvX3LBmPjmDtdXdu2pHR4q719ywZj45g7XV3btpR0aJu9fbr2U9OIK01NusZkA6hLXU27xqR0eKutfcsmZAOoS11d27akdH",
+          );
+          audio.volume = 1.0;
+          audio.play().catch(() => {});
+        }
       } catch (e) {
         console.error("AutoArena: HTML Audio fallback failed", e);
       }
@@ -694,8 +696,48 @@
         renderPanel();
       });
       sep2.appendChild(stratRow);
-
       panel.appendChild(sep2);
+
+      const sepSound = document.createElement("div");
+      Object.assign(sepSound.style, {
+        borderTop: "1px solid rgba(255,255,255,0.15)",
+        marginTop: "8px",
+        paddingTop: "8px",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: "8px",
+      });
+      const btnNormal = document.createElement("button");
+      btnNormal.textContent = "🔊 Normal";
+      Object.assign(btnNormal.style, {
+        flex: 1,
+        padding: "4px",
+        fontSize: "11px",
+        cursor: "pointer",
+        background: "#43A047",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+      });
+      btnNormal.onclick = () => playAlertSound(false);
+
+      const btnUrgent = document.createElement("button");
+      btnUrgent.textContent = "🚨 Urgent";
+      Object.assign(btnUrgent.style, {
+        flex: 1,
+        padding: "4px",
+        fontSize: "11px",
+        cursor: "pointer",
+        background: "#E53935",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+      });
+      btnUrgent.onclick = () => playAlertSound(true);
+
+      sepSound.appendChild(btnNormal);
+      sepSound.appendChild(btnUrgent);
+      panel.appendChild(sepSound);
     }
 
     gearBtn.addEventListener("click", () => {
