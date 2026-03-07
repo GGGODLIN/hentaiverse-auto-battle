@@ -467,6 +467,7 @@
       ocThreshold: 80,
       channelingSkill: "qb2",
       targetStrategy: "focus",
+      actionDelay: 300,
     };
     const TOGGLE_LABELS = {
       qb3: "Heal 1 (qb3)",
@@ -761,6 +762,70 @@
       sepSound.appendChild(btnNormal);
       sepSound.appendChild(btnUrgent);
       panel.appendChild(sepSound);
+
+      const sepDelay = document.createElement("div");
+      Object.assign(sepDelay.style, {
+        borderTop: "1px solid rgba(255,255,255,0.15)",
+        marginTop: "8px",
+        paddingTop: "8px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: "8px",
+      });
+      const delayLabel = document.createElement("span");
+      delayLabel.textContent = "Delay";
+      const delayCtrl = document.createElement("span");
+      Object.assign(delayCtrl.style, {
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+      });
+      const delayInput = document.createElement("input");
+      delayInput.type = "number";
+      delayInput.min = "300";
+      delayInput.step = "50";
+      delayInput.value = t.actionDelay ?? 300;
+      Object.assign(delayInput.style, {
+        width: "50px",
+        fontSize: "12px",
+        padding: "2px 4px",
+        background: "rgba(255,255,255,0.1)",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.3)",
+        borderRadius: "4px",
+        textAlign: "center",
+      });
+      const msLabel = document.createElement("span");
+      msLabel.textContent = "ms";
+      msLabel.style.fontSize = "11px";
+      msLabel.style.opacity = "0.6";
+      const saveBtn = document.createElement("button");
+      saveBtn.textContent = "Save";
+      Object.assign(saveBtn.style, {
+        padding: "2px 8px",
+        fontSize: "11px",
+        cursor: "pointer",
+        background: "#1976D2",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+      });
+      saveBtn.onclick = () => {
+        const val = Math.max(300, parseInt(delayInput.value) || 300);
+        delayInput.value = val;
+        setToggle("actionDelay", val);
+        saveBtn.textContent = "✓";
+        setTimeout(() => {
+          saveBtn.textContent = "Save";
+        }, 1000);
+      };
+      delayCtrl.appendChild(delayInput);
+      delayCtrl.appendChild(msLabel);
+      delayCtrl.appendChild(saveBtn);
+      sepDelay.appendChild(delayLabel);
+      sepDelay.appendChild(delayCtrl);
+      panel.appendChild(sepDelay);
     }
 
     gearBtn.addEventListener("click", () => {
@@ -848,13 +913,14 @@
     }
 
     async function useItem(id) {
+      const d = getToggles().actionDelay ?? 300;
       if (!document.getElementById(id)) return false;
       document.getElementById("ckey_items")?.click();
-      await wait(300);
+      await wait(d);
       document.getElementById(id)?.click();
-      await wait(300);
+      await wait(d);
       document.getElementById("ckey_attack")?.click();
-      await wait(300);
+      await wait(d);
       return true;
     }
 
@@ -867,6 +933,7 @@
 
       try {
         while (true) {
+          const actionDelay = getToggles().actionDelay ?? 300;
           if (!GM_getValue("autoArena", false)) break;
 
           const s = readState();
@@ -898,7 +965,7 @@
               );
               return;
             }
-            await wait(300);
+            await wait(actionDelay);
             continue;
           }
 
@@ -922,11 +989,11 @@
           if (s.hpP < (t.hpThreshold ?? 50) && (t.qb3 || t.qb4 || t.ikey3)) {
             if (t.qb3) {
               document.getElementById("qb3")?.click();
-              await wait(300);
+              await wait(actionDelay);
             }
             if (readState().hpP < (t.hpThreshold ?? 50) && t.qb4) {
               document.getElementById("qb4")?.click();
-              await wait(300);
+              await wait(actionDelay);
             }
             if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
@@ -954,7 +1021,7 @@
             const chSkill = t.channelingSkill ?? "qb2";
             if (t[chSkill] && document.getElementById(chSkill)) {
               document.getElementById(chSkill).click();
-              await wait(300);
+              await wait(actionDelay);
               continue;
             }
           }
@@ -990,7 +1057,7 @@
             document.getElementById("qb1")
           ) {
             document.getElementById("qb1").click();
-            await wait(300);
+            await wait(actionDelay);
             continue;
           }
 
@@ -1001,7 +1068,7 @@
             document.getElementById("qb2")
           ) {
             document.getElementById("qb2").click();
-            await wait(300);
+            await wait(actionDelay);
             continue;
           }
 
@@ -1012,9 +1079,9 @@
             s.alive.length > 0
           ) {
             document.getElementById("ckey_spirit")?.click();
-            await wait(300);
+            await wait(actionDelay);
             document.getElementById("ckey_attack")?.click();
-            await wait(300);
+            await wait(actionDelay);
           }
 
           function getHighestHpTarget(monsters) {
@@ -1048,19 +1115,19 @@
                     ? s.elites[0]
                     : getHighestHpTarget(s.alive);
                 document.getElementById(qb).click();
-                await wait(300);
+                await wait(actionDelay);
                 document.getElementById("mkey_" + skillTarget)?.click();
-                await wait(300);
+                await wait(actionDelay);
                 usedSkill = true;
                 break;
               }
             }
             if (!usedSkill) {
               document.getElementById("mkey_" + normalTarget)?.click();
-              await wait(300);
+              await wait(actionDelay);
             }
           } else {
-            await wait(300);
+            await wait(actionDelay);
           }
         }
       } catch (e) {
