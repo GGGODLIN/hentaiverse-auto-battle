@@ -931,11 +931,14 @@
             if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
             }
+            const qb3OnCd = !t.qb3 || !document.getElementById("qb3");
+            const qb4OnCd = !t.qb4 || !document.getElementById("qb4");
+            const ikey3OnCd = !t.ikey3 || !document.getElementById("ikey_3");
             if (
               readState().hpP < (t.hpThreshold ?? 50) &&
-              t.qb3 &&
-              t.qb4 &&
-              t.ikey3
+              qb3OnCd &&
+              qb4OnCd &&
+              ikey3OnCd
             ) {
               GM_setValue("autoArena", false);
               alertUser(
