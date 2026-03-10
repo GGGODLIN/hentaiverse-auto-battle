@@ -933,10 +933,14 @@
 
       try {
         while (true) {
-          const actionDelay = getToggles().actionDelay ?? 300;
+          let actionDelay = getToggles().actionDelay ?? 300;
           if (!GM_getValue("autoArena", false)) break;
 
           const s = readState();
+
+          if (s.hpP < (getToggles().hpThreshold ?? 50)) {
+            actionDelay = Math.max(actionDelay, 800);
+          }
 
           if (s.victory) {
             await waitFor(() => document.getElementById("btcp"), 300, 3000);
@@ -997,22 +1001,6 @@
             }
             if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
-            }
-            const qb3OnCd = !t.qb3 || !document.getElementById("qb3");
-            const qb4OnCd = !t.qb4 || !document.getElementById("qb4");
-            const ikey3OnCd = !t.ikey3 || !document.getElementById("ikey_3");
-            if (
-              readState().hpP < (t.hpThreshold ?? 50) &&
-              qb3OnCd &&
-              qb4OnCd &&
-              ikey3OnCd
-            ) {
-              GM_setValue("autoArena", false);
-              alertUser(
-                "LOW HP",
-                "All heals on CD! Manual intervention needed.",
-              );
-              return;
             }
             if (readState().hpP >= (t.hpThreshold ?? 50)) continue;
           }
