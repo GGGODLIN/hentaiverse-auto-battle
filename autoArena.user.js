@@ -393,14 +393,17 @@
     }
 
     if (isRiddleMaster() && GM_getValue("autoArena", false)) {
-      GM_setValue("autoArena", false);
-      setTimeout(() => {
-        alertUser(
-          "RIDDLE MASTER",
-          "Anti-cheat detected! Answer the riddle!",
-          true,
-        );
-      }, 500);
+      (async () => {
+        for (let retry = 0; retry < 3; retry++) {
+          await wait(5000);
+          if (!isRiddleMaster()) {
+            runBattleMode();
+            return;
+          }
+        }
+        GM_setValue("autoArena", false);
+        alertUser("RIDDLE MASTER", "Anti-cheat not resolved after 15s!", true);
+      })();
       return;
     }
 
@@ -961,13 +964,22 @@
           if (s.alive.length === 0) {
             idleLoops++;
             if (idleLoops >= MAX_IDLE_LOOPS) {
-              GM_setValue("autoArena", false);
-              alertUser(
-                "ANTI-CHEAT",
-                "Intervention required! RiddleMaster detected.",
-                true,
-              );
-              return;
+              let recovered = false;
+              for (let retry = 0; retry < 3; retry++) {
+                await wait(5000);
+                const rs = readState();
+                if (rs.alive.length > 0 || rs.victory) {
+                  recovered = true;
+                  break;
+                }
+              }
+              if (!recovered) {
+                GM_setValue("autoArena", false);
+                alertUser("ANTI-CHEAT", "Battle stalled after retries!", true);
+                return;
+              }
+              idleLoops = 0;
+              continue;
             }
             await wait(actionDelay);
             continue;
