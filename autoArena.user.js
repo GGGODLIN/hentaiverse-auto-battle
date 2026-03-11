@@ -457,6 +457,7 @@
       qb7: true,
       qb8: true,
       qb9: true,
+      ofc: true,
       ikey1: true,
       ikey2: true,
       ikey3: true,
@@ -481,6 +482,7 @@
       qb7: "Attack 1 (qb7)",
       qb8: "Attack 2 (qb8)",
       qb9: "Attack 3 (qb9)",
+      ofc: "OFC (AoE)",
       ikey1: "Health Draught",
       ikey2: "Mana Draught",
       ikey4: "Mana Potion",
@@ -504,6 +506,7 @@
       "qb7",
       "qb8",
       "qb9",
+      "ofc",
       "sparkOfLife",
     ];
 
@@ -1107,19 +1110,34 @@
               : s.alive[0];
           if (normalTarget != null) {
             let usedSkill = false;
-            for (const qb of ["qb7", "qb8", "qb9"]) {
-              if (t[qb] && document.getElementById(qb)) {
-                const skillTarget = isSpread
-                  ? getHighestHpTarget(s.alive)
-                  : s.elites.length > 0
-                    ? s.elites[0]
-                    : getHighestHpTarget(s.alive);
-                document.getElementById(qb).click();
-                await wait(actionDelay);
-                document.getElementById("mkey_" + skillTarget)?.click();
-                await wait(actionDelay);
-                usedSkill = true;
-                break;
+
+            if (
+              t.ofc &&
+              document.getElementById("1111") &&
+              s.alive.length >= 4
+            ) {
+              document.getElementById("1111").click();
+              await wait(actionDelay);
+              document.getElementById("mkey_" + s.alive[0])?.click();
+              await wait(actionDelay);
+              usedSkill = true;
+            }
+
+            if (!usedSkill) {
+              for (const qb of ["qb7", "qb8", "qb9"]) {
+                if (t[qb] && document.getElementById(qb)) {
+                  const skillTarget = isSpread
+                    ? getHighestHpTarget(s.alive)
+                    : s.elites.length > 0
+                      ? s.elites[0]
+                      : getHighestHpTarget(s.alive);
+                  document.getElementById(qb).click();
+                  await wait(actionDelay);
+                  document.getElementById("mkey_" + skillTarget)?.click();
+                  await wait(actionDelay);
+                  usedSkill = true;
+                  break;
+                }
               }
             }
             if (!usedSkill) {
