@@ -463,11 +463,13 @@
       ikey3: true,
       ikey4: true,
       ikey5: true,
+      ikey6: true,
       ikeyP: true,
       sparkOfLife: false,
       hpThreshold: 50,
       mpThreshold: 30,
       spThreshold: 70,
+      spPotThreshold: 50,
       ocThreshold: 80,
       channelingSkill: "qb2",
       targetStrategy: "focus",
@@ -487,6 +489,7 @@
       ikey2: "Mana Draught",
       ikey4: "Mana Potion",
       ikey5: "Spirit Draught",
+      ikey6: "SP Potion",
       ikeyP: "Pickup Item",
       spirit: "Spirit Stance",
       sparkOfLife: "Spark of Life",
@@ -501,6 +504,7 @@
       "ikey2",
       "ikey4",
       "ikey5",
+      "ikey6",
       "ikeyP",
       "spirit",
       "qb7",
@@ -624,6 +628,7 @@
         { key: "hpThreshold", label: "HP Heal" },
         { key: "mpThreshold", label: "MP Potion" },
         { key: "spThreshold", label: "SP Draught" },
+        { key: "spPotThreshold", label: "SP Potion" },
         { key: "ocThreshold", label: "OC Spirit" },
       ];
       thresholds.forEach(({ key, label }) => {
@@ -1035,6 +1040,10 @@
 
           if (t.ikey4 && s.mpP < (t.mpThreshold ?? 30)) {
             if (await useItem("ikey_4")) continue;
+          }
+
+          if (t.ikey6 && s.spP < (t.spPotThreshold ?? 50)) {
+            if (await useItem("ikey_6")) continue;
           }
 
           if (t.ikey1 && !s.buffs["Regeneration"]) {
