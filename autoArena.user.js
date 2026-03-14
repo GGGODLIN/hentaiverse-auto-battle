@@ -1028,9 +1028,83 @@
             const sparkBarGone =
               hpBarSrc.includes("bar_") && !hpBarSrc.includes("dgreen");
             if (sparkBuffGone || sparkBarGone) {
-              GM_setValue("autoArena", false);
-              alertUser("SPARK LOST", "Spark of Life disappeared!");
-              return;
+              await wait(100);
+              let sr = readState();
+
+              if (sr.hpP < 50) {
+                if (t.qb3 && document.getElementById("qb3")) {
+                  const p = waitForApi();
+                  document.getElementById("qb3").click();
+                  await p;
+                  await wait(100);
+                  sr = readState();
+                }
+                if (sr.hpP < 50 && t.qb4 && document.getElementById("qb4")) {
+                  const p = waitForApi();
+                  document.getElementById("qb4").click();
+                  await p;
+                  await wait(100);
+                  sr = readState();
+                }
+                if (sr.hpP < 50 && t.ikey3) {
+                  await useItem("ikey_3");
+                  await wait(100);
+                  sr = readState();
+                }
+              }
+              if (sr.mpP < 50 && t.ikey4) {
+                await useItem("ikey_4");
+                await wait(100);
+                sr = readState();
+              }
+              if (sr.spP < 50) {
+                if (t.ikey6) {
+                  await useItem("ikey_6");
+                  await wait(100);
+                  sr = readState();
+                }
+                if (sr.spP < 50 && t.ikey5) {
+                  await useItem("ikey_5");
+                  await wait(100);
+                  sr = readState();
+                }
+              }
+
+              if (sr.buffs["Spark of Life"]) continue;
+
+              if (sr.hpP < 50) {
+                GM_setValue("autoArena", false);
+                alertUser("SPARK LOST", "Spark gone & HP too low!");
+                return;
+              }
+              if (sr.mpP < 20) {
+                GM_setValue("autoArena", false);
+                alertUser("SPARK LOST", "Spark gone & MP too low!");
+                return;
+              }
+              if (sr.spP < 40) {
+                GM_setValue("autoArena", false);
+                alertUser("SPARK LOST", "Spark gone & SP too low!");
+                return;
+              }
+
+              const normalTarget = sr.elites.length > 0
+                ? sr.elites[0]
+                : sr.alive[0];
+              if (normalTarget != null) {
+                const p = waitForApi();
+                document.getElementById("mkey_" + normalTarget)?.click();
+                await p;
+                await wait(100);
+              }
+
+              const s3 = readState();
+              if (!s3.buffs["Spark of Life"]) {
+                GM_setValue("autoArena", false);
+                alertUser("SPARK LOST", "Spark not recovered after retry!");
+                return;
+              }
+              continue;
             }
           }
 
