@@ -977,6 +977,61 @@
 
           const s = readState();
 
+          if (s.hpP < 50) {
+            console.log("[AA] LOW HP: hpP=" + s.hpP + " rawHp=" + (document.getElementById("dvrhd")?.textContent ?? "?") + " alive=" + s.alive.length + " buffs=" + JSON.stringify(s.buffs));
+          }
+
+          const rawHp = parseInt(document.getElementById("dvrhd")?.textContent) || 0;
+          const healsAvail = {
+            qb3: !!document.getElementById("qb3"),
+            qb4: !!document.getElementById("qb4"),
+            ikey3: !!document.getElementById("ikey_3"),
+          };
+          if (rawHp > 0 && rawHp < 200 && !healsAvail.qb3 && !healsAvail.qb4 && !healsAvail.ikey3) {
+            console.log("[AA] CRITICAL HP: rawHp=" + rawHp + " heals=" + JSON.stringify(healsAvail));
+            GM_setValue("autoArena", false);
+            GM_setValue("sparkRetryCount", 0);
+            alertUser("CRITICAL HP", "HP < 200 & no heals available!");
+            return;
+          }
+
+          const t0 = getToggles();
+          if (t0.sparkOfLife) {
+            if (s.spP < (t0.spPotThreshold ?? 50)) {
+              const spCanRecover = t0.ikey6 && document.getElementById("ikey_6");
+              if (!spCanRecover) {
+                console.log("[AA] SPARK RISK: spP=" + s.spP + " no SP recovery available");
+                GM_setValue("autoArena", false);
+                GM_setValue("sparkRetryCount", 0);
+                alertUser("SP CRITICAL", "SP too low for Spark & no potions!");
+                return;
+              }
+            }
+            if (s.mpP < 15) {
+              const mpCanRecover = t0.ikey4 && document.getElementById("ikey_4");
+              if (!mpCanRecover) {
+                console.log("[AA] SPARK RISK: mpP=" + s.mpP + " no MP recovery available");
+                GM_setValue("autoArena", false);
+                GM_setValue("sparkRetryCount", 0);
+                alertUser("MP CRITICAL", "MP too low for autocast & no potions!");
+                return;
+              }
+            }
+          }
+
+          const sparkRetry = GM_getValue("sparkRetryCount", 0);
+          if (sparkRetry > 0) {
+            console.log("[AA] Spark retry check: count=" + sparkRetry + " spark=" + !!s.buffs["Spark of Life"] + " hpP=" + s.hpP);
+            if (s.buffs["Spark of Life"]) {
+              GM_setValue("sparkRetryCount", 0);
+            } else if (s.hpP < 50) {
+              GM_setValue("autoArena", false);
+              GM_setValue("sparkRetryCount", 0);
+              alertUser("SPARK LOST", "HP too low after reload!");
+              return;
+            }
+          }
+
           if (s.victory) {
             await waitFor(() => document.getElementById("btcp"), 300, 3000);
             if (isLastRoundVictory()) {
@@ -1022,12 +1077,8 @@
           const t = getToggles();
 
           if (t.sparkOfLife) {
-            const hpBarSrc =
-              document.querySelector("#dvbh img")?.getAttribute("src") ?? "";
-            const sparkBuffGone = !s.buffs["Spark of Life"];
-            const sparkBarGone =
-              hpBarSrc.includes("bar_") && !hpBarSrc.includes("dgreen");
-            if (sparkBuffGone || sparkBarGone) {
+            if (!s.buffs["Spark of Life"]) {
+              console.log("[AA] SPARK GONE: hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " rawHp=" + rawHp + " buffs=" + JSON.stringify(s.buffs));
               await wait(100);
               let sr = readState();
 
@@ -1070,41 +1121,36 @@
                 }
               }
 
-              if (sr.buffs["Spark of Life"]) continue;
+              console.log("[AA] Spark recovery done: hpP=" + sr.hpP + " mpP=" + sr.mpP + " spP=" + sr.spP + " spark=" + !!sr.buffs["Spark of Life"]);
 
-              if (sr.hpP < 50) {
-                GM_setValue("autoArena", false);
-                alertUser("SPARK LOST", "Spark gone & HP too low!");
-                return;
-              }
-              if (sr.mpP < 20) {
-                GM_setValue("autoArena", false);
-                alertUser("SPARK LOST", "Spark gone & MP too low!");
-                return;
-              }
-              if (sr.spP < 40) {
-                GM_setValue("autoArena", false);
-                alertUser("SPARK LOST", "Spark gone & SP too low!");
-                return;
+              if (sr.buffs["Spark of Life"]) {
+                console.log("[AA] Spark recovered via replenish");
+                GM_setValue("sparkRetryCount", 0);
+                continue;
               }
 
-              const normalTarget = sr.elites.length > 0
-                ? sr.elites[0]
-                : sr.alive[0];
-              if (normalTarget != null) {
-                const p = waitForApi();
-                document.getElementById("mkey_" + normalTarget)?.click();
-                await p;
-                await wait(100);
-              }
-
-              const s3 = readState();
-              if (!s3.buffs["Spark of Life"]) {
+              if (sr.hpP < 50 || sr.mpP < 20 || sr.spP < 40) {
+                const reason = sr.hpP < 50 ? "HP" : sr.mpP < 20 ? "MP" : "SP";
+                console.log("[AA] Spark alert: " + reason + " too low");
                 GM_setValue("autoArena", false);
-                alertUser("SPARK LOST", "Spark not recovered after retry!");
+                GM_setValue("sparkRetryCount", 0);
+                alertUser("SPARK LOST", "Spark gone & " + reason + " too low!");
                 return;
               }
-              continue;
+
+              const retries = GM_getValue("sparkRetryCount", 0);
+              if (retries >= 3) {
+                console.log("[AA] Spark alert: 3 reloads failed");
+                GM_setValue("autoArena", false);
+                GM_setValue("sparkRetryCount", 0);
+                alertUser("SPARK LOST", "Spark not recovered after 3 reloads!");
+                return;
+              }
+
+              console.log("[AA] Spark reload: retry " + (retries + 1));
+              GM_setValue("sparkRetryCount", retries + 1);
+              location.reload();
+              return;
             }
           }
 

@@ -53,6 +53,7 @@ Buffs: 411~432
 | CD 中的技能 | 拒絕，回傳 "Cooldown is still pending for {skill}" |
 | 不同技能輪替 | 允許（每個技能有獨立 CD） |
 | 直接 call API 繞過 UI CD | 無效，CD 是 server-side 驗證 |
+| 使用道具（藥水）| **不觸發敵人回合**，textlog 只有道具使用和 buff 獲得，無敵人攻擊 |
 
 ### 對 autoArena 的啟示
 - 目前腳本的 DOM click 方式和直接 API call **效果一樣**，沒有速度優勢能繞過限制
