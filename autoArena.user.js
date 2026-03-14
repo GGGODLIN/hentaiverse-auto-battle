@@ -16,6 +16,35 @@
   "use strict";
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let _apiResolve = null;
+  const _origOpen = XMLHttpRequest.prototype.open;
+  const _origSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this._hvUrl = url;
+    return _origOpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (this._hvUrl && this._hvUrl.includes("/json") && _apiResolve) {
+      this.addEventListener("load", () => {
+        if (_apiResolve) {
+          _apiResolve();
+          _apiResolve = null;
+        }
+      }, { once: true });
+    }
+    return _origSend.apply(this, arguments);
+  };
+  const waitForApi = (timeout = 5000) =>
+    new Promise((resolve) => {
+      _apiResolve = resolve;
+      setTimeout(() => {
+        if (_apiResolve) {
+          _apiResolve();
+          _apiResolve = null;
+        }
+      }, timeout);
+    });
   const waitFor = async (check, interval = 300, timeout = 3000) => {
     const start = Date.now();
     while (Date.now() - start < timeout) {
@@ -924,14 +953,14 @@
     }
 
     async function useItem(id) {
-      const d = getToggles().actionDelay ?? 300;
       if (!document.getElementById(id)) return false;
       document.getElementById("ckey_items")?.click();
-      await wait(d);
+      await wait(50);
+      const p = waitForApi();
       document.getElementById(id)?.click();
-      await wait(d);
+      await p;
       document.getElementById("ckey_attack")?.click();
-      await wait(d);
+      await wait(50);
       return true;
     }
 
@@ -944,14 +973,9 @@
 
       try {
         while (true) {
-          let actionDelay = getToggles().actionDelay ?? 300;
           if (!GM_getValue("autoArena", false)) break;
 
           const s = readState();
-
-          if (s.hpP < (getToggles().hpThreshold ?? 50)) {
-            actionDelay = Math.max(actionDelay, 800);
-          }
 
           if (s.victory) {
             await waitFor(() => document.getElementById("btcp"), 300, 3000);
@@ -989,7 +1013,7 @@
               idleLoops = 0;
               continue;
             }
-            await wait(actionDelay);
+            await wait(300);
             continue;
           }
 
@@ -1012,12 +1036,14 @@
 
           if (s.hpP < (t.hpThreshold ?? 50) && (t.qb3 || t.qb4 || t.ikey3)) {
             if (t.qb3) {
+              const p = waitForApi();
               document.getElementById("qb3")?.click();
-              await wait(actionDelay);
+              await p;
             }
             if (readState().hpP < (t.hpThreshold ?? 50) && t.qb4) {
+              const p = waitForApi();
               document.getElementById("qb4")?.click();
-              await wait(actionDelay);
+              await p;
             }
             if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
@@ -1028,8 +1054,9 @@
           if (s.buffs["Channeling"]) {
             const chSkill = t.channelingSkill ?? "qb2";
             if (t[chSkill] && document.getElementById(chSkill)) {
+              const p = waitForApi();
               document.getElementById(chSkill).click();
-              await wait(actionDelay);
+              await p;
               continue;
             }
           }
@@ -1068,8 +1095,9 @@
             s.buffs["Regen"] !== 999 &&
             document.getElementById("qb1")
           ) {
+            const p = waitForApi();
             document.getElementById("qb1").click();
-            await wait(actionDelay);
+            await p;
             continue;
           }
 
@@ -1079,8 +1107,9 @@
             s.buffs["Heartseeker"] !== 999 &&
             document.getElementById("qb2")
           ) {
+            const p = waitForApi();
             document.getElementById("qb2").click();
-            await wait(actionDelay);
+            await p;
             continue;
           }
 
@@ -1091,9 +1120,9 @@
             s.alive.length > 0
           ) {
             document.getElementById("ckey_spirit")?.click();
-            await wait(actionDelay);
+            await wait(50);
             document.getElementById("ckey_attack")?.click();
-            await wait(actionDelay);
+            await wait(50);
           }
 
           function getHighestHpTarget(monsters) {
@@ -1126,9 +1155,10 @@
               s.alive.length >= 4
             ) {
               document.getElementById("1111").click();
-              await wait(actionDelay);
+              await wait(50);
+              const p = waitForApi();
               document.getElementById("mkey_" + s.alive[0])?.click();
-              await wait(actionDelay);
+              await p;
               usedSkill = true;
             }
 
@@ -1141,20 +1171,22 @@
                       ? s.elites[0]
                       : getHighestHpTarget(s.alive);
                   document.getElementById(qb).click();
-                  await wait(actionDelay);
+                  await wait(50);
+                  const p = waitForApi();
                   document.getElementById("mkey_" + skillTarget)?.click();
-                  await wait(actionDelay);
+                  await p;
                   usedSkill = true;
                   break;
                 }
               }
             }
             if (!usedSkill) {
+              const p = waitForApi();
               document.getElementById("mkey_" + normalTarget)?.click();
-              await wait(actionDelay);
+              await p;
             }
           } else {
-            await wait(actionDelay);
+            await wait(300);
           }
         }
       } catch (e) {
