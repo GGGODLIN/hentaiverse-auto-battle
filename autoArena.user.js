@@ -493,6 +493,9 @@
       ikey4: true,
       ikey5: true,
       ikey6: true,
+      ikey7: true,
+      ikey8: true,
+      ikey9: true,
       ikeyP: true,
       sparkOfLife: false,
       hpThreshold: 50,
@@ -519,6 +522,9 @@
       ikey4: "Mana Potion",
       ikey5: "Spirit Draught",
       ikey6: "SP Potion",
+      ikey7: "Health Elixir",
+      ikey8: "Mana Elixir",
+      ikey9: "Spirit Elixir",
       ikeyP: "Pickup Item",
       spirit: "Spirit Stance",
       sparkOfLife: "Spark of Life",
@@ -534,6 +540,9 @@
       "ikey4",
       "ikey5",
       "ikey6",
+      "ikey7",
+      "ikey8",
+      "ikey9",
       "ikeyP",
       "spirit",
       "qb7",
@@ -597,7 +606,7 @@
       boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
       border: "1px solid rgba(255,255,255,0.15)",
       display: "none",
-      minWidth: "180px",
+      minWidth: "360px",
     });
     document.body.appendChild(panel);
 
@@ -616,6 +625,12 @@
       header.textContent = "\uD83C\uDFAE " + profileLabel + " Profile";
       panel.appendChild(header);
 
+      const toggleGrid = document.createElement("div");
+      Object.assign(toggleGrid.style, {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: "0 16px",
+      });
       TOGGLE_ORDER.forEach((key) => {
         const row = document.createElement("div");
         Object.assign(row.style, {
@@ -639,8 +654,9 @@
           setToggle(key, !t[key]);
           renderPanel();
         });
-        panel.appendChild(row);
+        toggleGrid.appendChild(row);
       });
+      panel.appendChild(toggleGrid);
 
       const sep1 = document.createElement("div");
       Object.assign(sep1.style, {
@@ -986,9 +1002,10 @@
             qb3: !!document.getElementById("qb3"),
             qb4: !!document.getElementById("qb4"),
             ikey3: !!document.getElementById("ikey_3"),
+            ikey7: !!document.getElementById("ikey_7"),
           };
-          if (rawHp > 0 && rawHp < 200 && !healsAvail.qb3 && !healsAvail.qb4 && !healsAvail.ikey3) {
-            console.log("[AA] CRITICAL HP: rawHp=" + rawHp + " heals=" + JSON.stringify(healsAvail));
+          if (rawHp > 0 && rawHp < 200 && !healsAvail.qb3 && !healsAvail.qb4 && !healsAvail.ikey3 && !healsAvail.ikey7) {
+            console.log("[AA] ALERT CRITICAL HP: rawHp=" + rawHp + " hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " heals=" + JSON.stringify(healsAvail) + " buffs=" + JSON.stringify(s.buffs));
             GM_setValue("autoArena", false);
             GM_setValue("sparkRetryCount", 0);
             alertUser("CRITICAL HP", "HP < 200 & no heals available!");
@@ -998,9 +1015,10 @@
           const t0 = getToggles();
           if (t0.sparkOfLife) {
             if (s.spP < (t0.spPotThreshold ?? 50)) {
-              const spCanRecover = t0.ikey6 && document.getElementById("ikey_6");
+              const spCanRecover = (t0.ikey6 && document.getElementById("ikey_6")) ||
+                (t0.ikey9 && document.getElementById("ikey_9"));
               if (!spCanRecover) {
-                console.log("[AA] SPARK RISK: spP=" + s.spP + " no SP recovery available");
+                console.log("[AA] ALERT SP CRITICAL: hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " ikey6=" + !!document.getElementById("ikey_6") + " ikey9=" + !!document.getElementById("ikey_9") + " buffs=" + JSON.stringify(s.buffs));
                 GM_setValue("autoArena", false);
                 GM_setValue("sparkRetryCount", 0);
                 alertUser("SP CRITICAL", "SP too low for Spark & no potions!");
@@ -1008,9 +1026,10 @@
               }
             }
             if (s.mpP < 15) {
-              const mpCanRecover = t0.ikey4 && document.getElementById("ikey_4");
+              const mpCanRecover = (t0.ikey4 && document.getElementById("ikey_4")) ||
+                (t0.ikey8 && document.getElementById("ikey_8"));
               if (!mpCanRecover) {
-                console.log("[AA] SPARK RISK: mpP=" + s.mpP + " no MP recovery available");
+                console.log("[AA] ALERT MP CRITICAL: hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " ikey4=" + !!document.getElementById("ikey_4") + " ikey8=" + !!document.getElementById("ikey_8") + " buffs=" + JSON.stringify(s.buffs));
                 GM_setValue("autoArena", false);
                 GM_setValue("sparkRetryCount", 0);
                 alertUser("MP CRITICAL", "MP too low for autocast & no potions!");
@@ -1021,10 +1040,11 @@
 
           const sparkRetry = GM_getValue("sparkRetryCount", 0);
           if (sparkRetry > 0) {
-            console.log("[AA] Spark retry check: count=" + sparkRetry + " spark=" + !!s.buffs["Spark of Life"] + " hpP=" + s.hpP);
+            console.log("[AA] Spark retry check: count=" + sparkRetry + " spark=" + !!s.buffs["Spark of Life"] + " hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP);
             if (s.buffs["Spark of Life"]) {
               GM_setValue("sparkRetryCount", 0);
             } else if (s.hpP < 50) {
+              console.log("[AA] ALERT SPARK LOST (post-reload): hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " buffs=" + JSON.stringify(s.buffs));
               GM_setValue("autoArena", false);
               GM_setValue("sparkRetryCount", 0);
               alertUser("SPARK LOST", "HP too low after reload!");
@@ -1061,6 +1081,7 @@
                 }
               }
               if (!recovered) {
+                console.log("[AA] ALERT ANTI-CHEAT: battle stalled, hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " alive=" + s.alive.length);
                 GM_setValue("autoArena", false);
                 alertUser("ANTI-CHEAT", "Battle stalled after retries!", true);
                 return;
@@ -1102,9 +1123,19 @@
                   await wait(100);
                   sr = readState();
                 }
+                if (sr.hpP < 50 && t.ikey7) {
+                  await useItem("ikey_7");
+                  await wait(100);
+                  sr = readState();
+                }
               }
               if (sr.mpP < 50 && t.ikey4) {
                 await useItem("ikey_4");
+                await wait(100);
+                sr = readState();
+              }
+              if (sr.mpP < 15 && t.ikey8) {
+                await useItem("ikey_8");
                 await wait(100);
                 sr = readState();
               }
@@ -1116,6 +1147,11 @@
                 }
                 if (sr.spP < 50 && t.ikey5) {
                   await useItem("ikey_5");
+                  await wait(100);
+                  sr = readState();
+                }
+                if (sr.spP < 40 && t.ikey9) {
+                  await useItem("ikey_9");
                   await wait(100);
                   sr = readState();
                 }
@@ -1131,7 +1167,7 @@
 
               if (sr.hpP < 50 || sr.mpP < 20 || sr.spP < 40) {
                 const reason = sr.hpP < 50 ? "HP" : sr.mpP < 20 ? "MP" : "SP";
-                console.log("[AA] Spark alert: " + reason + " too low");
+                console.log("[AA] ALERT SPARK LOST (" + reason + "): hpP=" + sr.hpP + " mpP=" + sr.mpP + " spP=" + sr.spP + " buffs=" + JSON.stringify(sr.buffs));
                 GM_setValue("autoArena", false);
                 GM_setValue("sparkRetryCount", 0);
                 alertUser("SPARK LOST", "Spark gone & " + reason + " too low!");
@@ -1140,7 +1176,7 @@
 
               const retries = GM_getValue("sparkRetryCount", 0);
               if (retries >= 3) {
-                console.log("[AA] Spark alert: 3 reloads failed");
+                console.log("[AA] ALERT SPARK LOST (3 reloads): hpP=" + sr.hpP + " mpP=" + sr.mpP + " spP=" + sr.spP + " buffs=" + JSON.stringify(sr.buffs));
                 GM_setValue("autoArena", false);
                 GM_setValue("sparkRetryCount", 0);
                 alertUser("SPARK LOST", "Spark not recovered after 3 reloads!");
@@ -1168,6 +1204,9 @@
             if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey3) {
               await useItem("ikey_3");
             }
+            if (readState().hpP < (t.hpThreshold ?? 50) && t.ikey7) {
+              await useItem("ikey_7");
+            }
             if (readState().hpP >= (t.hpThreshold ?? 50)) continue;
           }
 
@@ -1189,8 +1228,16 @@
             if (await useItem("ikey_4")) continue;
           }
 
+          if (t.ikey8 && s.mpP < 15) {
+            if (await useItem("ikey_8")) continue;
+          }
+
           if (t.ikey6 && s.spP < (t.spPotThreshold ?? 50)) {
             if (await useItem("ikey_6")) continue;
+          }
+
+          if (t.ikey9 && s.spP < 40) {
+            if (await useItem("ikey_9")) continue;
           }
 
           if (t.ikey1 && !s.buffs["Regeneration"]) {
@@ -1310,6 +1357,7 @@
           }
         }
       } catch (e) {
+        console.log("[AA] ALERT ERROR: " + e.message + " hpP=" + (readState().hpP ?? "?") + " mpP=" + (readState().mpP ?? "?") + " spP=" + (readState().spP ?? "?"));
         GM_setValue("autoArena", false);
         alertUser("ERROR", "Script stopped unexpectedly: " + e.message);
         console.error("AutoArena:", e);
