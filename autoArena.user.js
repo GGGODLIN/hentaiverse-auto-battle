@@ -287,6 +287,12 @@
   function runBattleMode() {
     let battleRunning = false;
     const isInBattle = () => !!document.getElementById("ckey_attack");
+
+    function setStatus(type, reason) {
+      const now = new Date();
+      const time = String(now.getHours()).padStart(2, "0") + ":" + String(now.getMinutes()).padStart(2, "0") + ":" + String(now.getSeconds()).padStart(2, "0");
+      GM_setValue("lastBattleStatus", { type, reason, time });
+    }
     const isVictorious = () =>
       document.body.innerText.substring(0, 500).includes("victorious");
     const isRiddleMaster = () => !!document.getElementById("riddlemaster");
@@ -430,6 +436,7 @@
             return;
           }
         }
+        setStatus("alert", "Riddle Master detected");
         GM_setValue("autoArena", false);
         alertUser("RIDDLE MASTER", "Anti-cheat not resolved after 15s!", true);
       })();
@@ -498,6 +505,7 @@
       ikey9: true,
       ikeyP: true,
       sparkOfLife: false,
+      priorityTargets: "Yggdrasil",
       hpThreshold: 50,
       mpThreshold: 30,
       spThreshold: 70,
@@ -624,6 +632,28 @@
       });
       header.textContent = "\uD83C\uDFAE " + profileLabel + " Profile";
       panel.appendChild(header);
+
+      const lastStatus = GM_getValue("lastBattleStatus", null);
+      if (lastStatus) {
+        const statusRow = document.createElement("div");
+        Object.assign(statusRow.style, {
+          fontSize: "11px",
+          marginBottom: "6px",
+          paddingBottom: "4px",
+          borderBottom: "1px solid rgba(255,255,255,0.15)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        });
+        const icons = { victory: "\uD83C\uDFC6", defeated: "\uD83D\uDC80", alert: "\uD83D\uDEA8", reload: "\uD83D\uDD04", continue: "\u23E9" };
+        const colors = { victory: "#FFD600", defeated: "#E53935", alert: "#FF9800", reload: "#42A5F5", continue: "#66BB6A" };
+        const icon = icons[lastStatus.type] ?? "\u2753";
+        const color = colors[lastStatus.type] ?? "#fff";
+        statusRow.innerHTML =
+          '<span style="color:' + color + '">' + icon + " " + lastStatus.reason + "</span>" +
+          '<span style="opacity:0.4">' + lastStatus.time + "</span>";
+        panel.appendChild(statusRow);
+      }
 
       const toggleGrid = document.createElement("div");
       Object.assign(toggleGrid.style, {
@@ -776,6 +806,37 @@
         renderPanel();
       });
       sep2.appendChild(stratRow);
+
+      const prioRow = document.createElement("div");
+      Object.assign(prioRow.style, {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: "4px",
+        gap: "8px",
+      });
+      const prioLabel = document.createElement("span");
+      prioLabel.textContent = "Priority";
+      const prioInput = document.createElement("input");
+      prioInput.type = "text";
+      prioInput.value = t.priorityTargets ?? "";
+      prioInput.placeholder = "e.g. Yggdrasil,Healer";
+      Object.assign(prioInput.style, {
+        flex: "1",
+        fontSize: "11px",
+        padding: "2px 4px",
+        background: "rgba(255,255,255,0.1)",
+        color: "#fff",
+        border: "1px solid rgba(255,255,255,0.3)",
+        borderRadius: "4px",
+      });
+      prioInput.addEventListener("change", () => {
+        setToggle("priorityTargets", prioInput.value);
+      });
+      prioRow.appendChild(prioLabel);
+      prioRow.appendChild(prioInput);
+      sep2.appendChild(prioRow);
+
       panel.appendChild(sep2);
 
       const sepSound = document.createElement("div");
@@ -986,12 +1047,39 @@
 
       let idleLoops = 0;
       const MAX_IDLE_LOOPS = 10;
+      let successActions = 0;
+
+      function retryOrAlert(title, body, isUrgent = false) {
+        const count = GM_getValue("alertRetryCount", 0);
+        const rs = readState();
+        console.log("[AA] ALERT " + title + " (retry " + (count + 1) + "/3): " + body + " hpP=" + rs.hpP + " mpP=" + rs.mpP + " spP=" + rs.spP);
+        if (count < 2) {
+          setStatus("reload", title + " (" + (count + 1) + "/3)");
+          GM_setValue("alertRetryCount", count + 1);
+          location.reload();
+          return true;
+        }
+        setStatus("alert", title + ": " + body);
+        GM_setValue("alertRetryCount", 0);
+        GM_setValue("autoArena", false);
+        alertUser(title, body, isUrgent);
+        return false;
+      }
 
       try {
         while (true) {
           if (!GM_getValue("autoArena", false)) break;
 
           const s = readState();
+
+          if (s.hpP <= 0 && Object.keys(s.buffs).length === 0) {
+            console.log("[AA] DEFEATED: hpP=" + s.hpP + " alive=" + s.alive.length);
+            setStatus("defeated", "You have been defeated");
+            GM_setValue("autoArena", false);
+            GM_setValue("alertRetryCount", 0);
+            alertUser("DEFEATED", "You have been defeated!");
+            return;
+          }
 
           if (s.hpP < 50) {
             console.log("[AA] LOW HP: hpP=" + s.hpP + " rawHp=" + (document.getElementById("dvrhd")?.textContent ?? "?") + " alive=" + s.alive.length + " buffs=" + JSON.stringify(s.buffs));
@@ -1005,51 +1093,33 @@
             ikey7: !!document.getElementById("ikey_7"),
           };
           if (rawHp > 0 && rawHp < 200 && !healsAvail.qb3 && !healsAvail.qb4 && !healsAvail.ikey3 && !healsAvail.ikey7) {
-            console.log("[AA] ALERT CRITICAL HP: rawHp=" + rawHp + " hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " heals=" + JSON.stringify(healsAvail) + " buffs=" + JSON.stringify(s.buffs));
-            GM_setValue("autoArena", false);
-            GM_setValue("sparkRetryCount", 0);
-            alertUser("CRITICAL HP", "HP < 200 & no heals available!");
+            retryOrAlert("CRITICAL HP", "HP < 200 & no heals available!");
             return;
           }
 
           const t0 = getToggles();
           if (t0.sparkOfLife) {
-            if (s.spP < (t0.spPotThreshold ?? 50)) {
+            if (s.spP < 40) {
               const spCanRecover = (t0.ikey6 && document.getElementById("ikey_6")) ||
                 (t0.ikey9 && document.getElementById("ikey_9"));
               if (!spCanRecover) {
-                console.log("[AA] ALERT SP CRITICAL: hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " ikey6=" + !!document.getElementById("ikey_6") + " ikey9=" + !!document.getElementById("ikey_9") + " buffs=" + JSON.stringify(s.buffs));
-                GM_setValue("autoArena", false);
-                GM_setValue("sparkRetryCount", 0);
-                alertUser("SP CRITICAL", "SP too low for Spark & no potions!");
+                retryOrAlert("SP CRITICAL", "SP too low for Spark & no potions!");
                 return;
               }
             }
-            if (s.mpP < 15) {
+            if (s.mpP < 20) {
               const mpCanRecover = (t0.ikey4 && document.getElementById("ikey_4")) ||
                 (t0.ikey8 && document.getElementById("ikey_8"));
               if (!mpCanRecover) {
-                console.log("[AA] ALERT MP CRITICAL: hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " ikey4=" + !!document.getElementById("ikey_4") + " ikey8=" + !!document.getElementById("ikey_8") + " buffs=" + JSON.stringify(s.buffs));
-                GM_setValue("autoArena", false);
-                GM_setValue("sparkRetryCount", 0);
-                alertUser("MP CRITICAL", "MP too low for autocast & no potions!");
+                retryOrAlert("MP CRITICAL", "MP too low for autocast & no potions!");
                 return;
               }
             }
           }
 
-          const sparkRetry = GM_getValue("sparkRetryCount", 0);
-          if (sparkRetry > 0) {
-            console.log("[AA] Spark retry check: count=" + sparkRetry + " spark=" + !!s.buffs["Spark of Life"] + " hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP);
-            if (s.buffs["Spark of Life"]) {
-              GM_setValue("sparkRetryCount", 0);
-            } else if (s.hpP < 50) {
-              console.log("[AA] ALERT SPARK LOST (post-reload): hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " buffs=" + JSON.stringify(s.buffs));
-              GM_setValue("autoArena", false);
-              GM_setValue("sparkRetryCount", 0);
-              alertUser("SPARK LOST", "HP too low after reload!");
-              return;
-            }
+          if (GM_getValue("alertRetryCount", 0) > 0 && s.buffs["Spark of Life"] && s.hpP >= 50) {
+            console.log("[AA] Recovered after retry, resetting counter");
+            GM_setValue("alertRetryCount", 0);
           }
 
           if (s.victory) {
@@ -1060,10 +1130,12 @@
               btn.style.background =
                 "linear-gradient(135deg, #FFD600, #FFAB00)";
               btn.style.color = "#333";
+              setStatus("victory", "Arena cleared!");
               alertUser("CLEARED!", "Arena challenge completed!");
               return;
             }
             await wait(1500);
+            setStatus("continue", "Round continue");
             unsafeWindow.battle?.battle_continue?.();
             return;
           }
@@ -1081,9 +1153,7 @@
                 }
               }
               if (!recovered) {
-                console.log("[AA] ALERT ANTI-CHEAT: battle stalled, hpP=" + s.hpP + " mpP=" + s.mpP + " spP=" + s.spP + " alive=" + s.alive.length);
-                GM_setValue("autoArena", false);
-                alertUser("ANTI-CHEAT", "Battle stalled after retries!", true);
+                retryOrAlert("ANTI-CHEAT", "Battle stalled after retries!", true);
                 return;
               }
               idleLoops = 0;
@@ -1134,7 +1204,7 @@
                 await wait(100);
                 sr = readState();
               }
-              if (sr.mpP < 15 && t.ikey8) {
+              if (sr.mpP < 20 && t.ikey8) {
                 await useItem("ikey_8");
                 await wait(100);
                 sr = readState();
@@ -1161,31 +1231,17 @@
 
               if (sr.buffs["Spark of Life"]) {
                 console.log("[AA] Spark recovered via replenish");
-                GM_setValue("sparkRetryCount", 0);
+                GM_setValue("alertRetryCount", 0);
                 continue;
               }
 
-              if (sr.hpP < 50 || sr.mpP < 20 || sr.spP < 40) {
-                const reason = sr.hpP < 50 ? "HP" : sr.mpP < 20 ? "MP" : "SP";
-                console.log("[AA] ALERT SPARK LOST (" + reason + "): hpP=" + sr.hpP + " mpP=" + sr.mpP + " spP=" + sr.spP + " buffs=" + JSON.stringify(sr.buffs));
-                GM_setValue("autoArena", false);
-                GM_setValue("sparkRetryCount", 0);
-                alertUser("SPARK LOST", "Spark gone & " + reason + " too low!");
+              const reason = sr.hpP < 50 ? "HP" : sr.mpP < 20 ? "MP" : sr.spP < 40 ? "SP" : null;
+              if (reason) {
+                retryOrAlert("SPARK LOST", "Spark gone & " + reason + " too low!");
                 return;
               }
 
-              const retries = GM_getValue("sparkRetryCount", 0);
-              if (retries >= 3) {
-                console.log("[AA] ALERT SPARK LOST (3 reloads): hpP=" + sr.hpP + " mpP=" + sr.mpP + " spP=" + sr.spP + " buffs=" + JSON.stringify(sr.buffs));
-                GM_setValue("autoArena", false);
-                GM_setValue("sparkRetryCount", 0);
-                alertUser("SPARK LOST", "Spark not recovered after 3 reloads!");
-                return;
-              }
-
-              console.log("[AA] Spark reload: retry " + (retries + 1));
-              GM_setValue("sparkRetryCount", retries + 1);
-              location.reload();
+              retryOrAlert("SPARK LOST", "Spark not recovered after replenish");
               return;
             }
           }
@@ -1228,7 +1284,7 @@
             if (await useItem("ikey_4")) continue;
           }
 
-          if (t.ikey8 && s.mpP < 15) {
+          if (t.ikey8 && s.mpP < 20) {
             if (await useItem("ikey_8")) continue;
           }
 
@@ -1307,12 +1363,30 @@
             return best;
           }
 
+          function getPriorityTarget(aliveList) {
+            const names = (t.priorityTargets ?? "")
+              .split(",")
+              .map((n) => n.trim().toLowerCase())
+              .filter((n) => n);
+            if (names.length === 0) return null;
+            for (const i of aliveList) {
+              const m = document.getElementById("mkey_" + i);
+              const nameEl = m?.querySelector(".btm3 div div");
+              const monsterName = (nameEl?.textContent ?? "").trim().toLowerCase();
+              if (names.some((n) => monsterName.includes(n))) return i;
+            }
+            return null;
+          }
+
           const isSpread = (t.targetStrategy ?? "focus") === "spread";
-          const normalTarget = isSpread
-            ? getHighestHpTarget(s.alive)
-            : s.elites.length > 0
-              ? s.elites[0]
-              : s.alive[0];
+          const priorityTarget = getPriorityTarget(s.alive);
+          const normalTarget = priorityTarget != null
+            ? priorityTarget
+            : isSpread
+              ? getHighestHpTarget(s.alive)
+              : s.elites.length > 0
+                ? s.elites[0]
+                : s.alive[0];
           if (normalTarget != null) {
             let usedSkill = false;
 
@@ -1332,11 +1406,13 @@
             if (!usedSkill) {
               for (const qb of ["qb7", "qb8", "qb9"]) {
                 if (t[qb] && document.getElementById(qb)) {
-                  const skillTarget = isSpread
-                    ? getHighestHpTarget(s.alive)
-                    : s.elites.length > 0
-                      ? s.elites[0]
-                      : getHighestHpTarget(s.alive);
+                  const skillTarget = priorityTarget != null
+                    ? priorityTarget
+                    : isSpread
+                      ? getHighestHpTarget(s.alive)
+                      : s.elites.length > 0
+                        ? s.elites[0]
+                        : getHighestHpTarget(s.alive);
                   document.getElementById(qb).click();
                   await wait(50);
                   const p = waitForApi();
@@ -1352,15 +1428,19 @@
               document.getElementById("mkey_" + normalTarget)?.click();
               await p;
             }
+            successActions++;
+            if (successActions >= 3 && GM_getValue("alertRetryCount", 0) > 0) {
+              console.log("[AA] Stable combat, resetting retry counter");
+              GM_setValue("alertRetryCount", 0);
+              successActions = 0;
+            }
           } else {
             await wait(300);
           }
         }
       } catch (e) {
-        console.log("[AA] ALERT ERROR: " + e.message + " hpP=" + (readState().hpP ?? "?") + " mpP=" + (readState().mpP ?? "?") + " spP=" + (readState().spP ?? "?"));
-        GM_setValue("autoArena", false);
-        alertUser("ERROR", "Script stopped unexpectedly: " + e.message);
         console.error("AutoArena:", e);
+        retryOrAlert("ERROR", "Script error: " + e.message);
       } finally {
         battleRunning = false;
         syncButton();
@@ -1395,6 +1475,7 @@
         if (found) {
           startBattle();
         } else {
+          setStatus("alert", "Battle not found after reload");
           GM_setValue("autoArena", false);
           syncButton();
           alertUser(
