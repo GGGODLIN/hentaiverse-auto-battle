@@ -95,9 +95,14 @@ function updateResetTimer() {
 
 function renderControls() {
   const btnArena = document.getElementById("btnArenaSweep");
-  const arenaOn = state.arenaSweepEnabled ?? false;
+  const arenaOn = state.arenaSweepEnabled_normal ?? false;
   btnArena.textContent = arenaOn ? "ON" : "OFF";
   btnArena.className = "toggle-btn " + (arenaOn ? "on" : "off");
+
+  const btnArenaIsekai = document.getElementById("btnArenaIsekai");
+  const isekaiOn = state.arenaSweepEnabled_isekai ?? false;
+  btnArenaIsekai.textContent = isekaiOn ? "ON" : "OFF";
+  btnArenaIsekai.className = "toggle-btn " + (isekaiOn ? "on" : "off");
 
   const btnEnc = document.getElementById("btnEncounter");
   const encOn = state.encounterEnabled ?? false;
@@ -118,16 +123,13 @@ function renderControls() {
   }
 }
 
-function renderArenaProgress() {
-  const grid = document.getElementById("arenaGrid");
-  grid.innerHTML = "";
-  const difficulties = state.arenaDifficulties ?? [];
-  const progress = state.arenaSweepProgress ?? {};
+function renderArenaProgressForWorld(grid, worldLabel, difficulties, progress) {
+  if (difficulties.length === 0) return;
 
-  if (difficulties.length === 0) {
-    grid.innerHTML = '<div style="color:#666;font-size:13px;">No arena data yet. Start a sweep to load difficulties.</div>';
-    return;
-  }
+  const header = document.createElement("div");
+  header.style.cssText = "grid-column:1/-1;font-weight:bold;font-size:13px;margin-top:8px;";
+  header.textContent = worldLabel;
+  grid.appendChild(header);
 
   for (const d of difficulties) {
     const status = progress[d.id] ?? "pending";
@@ -146,12 +148,35 @@ function renderArenaProgress() {
   }
 }
 
+function renderArenaProgress() {
+  const grid = document.getElementById("arenaGrid");
+  grid.innerHTML = "";
+
+  const normalDiffs = state.arenaDifficulties_normal ?? [];
+  const normalProgress = state.arenaSweepProgress_normal ?? {};
+  const isekaiDiffs = state.arenaDifficulties_isekai ?? [];
+  const isekaiProgress = state.arenaSweepProgress_isekai ?? {};
+
+  if (normalDiffs.length === 0 && isekaiDiffs.length === 0) {
+    grid.innerHTML = '<div style="color:#666;font-size:13px;">No arena data yet. Start a sweep to load difficulties.</div>';
+    return;
+  }
+
+  renderArenaProgressForWorld(grid, "Normal", normalDiffs, normalProgress);
+  renderArenaProgressForWorld(grid, "Isekai", isekaiDiffs, isekaiProgress);
+}
+
 function renderStats() {
   const stats = state.dailyStats ?? {};
   document.getElementById("statArenaWins").textContent = stats.arenaWins ?? 0;
   document.getElementById("statArenaLosses").textContent = stats.arenaLosses ?? 0;
   document.getElementById("statEncounters").textContent = stats.encounterCount ?? 0;
-  document.getElementById("statStamina").textContent = state.currentStamina ?? "--";
+  const normalStam = state.currentStamina_normal;
+  const isekaiStam = state.currentStamina_isekai;
+  const stamParts = [];
+  if (normalStam != null) stamParts.push("N:" + normalStam);
+  if (isekaiStam != null) stamParts.push("I:" + isekaiStam);
+  document.getElementById("statStamina").textContent = stamParts.length > 0 ? stamParts.join(" / ") : "--";
   const rmVal = state.riddleMasterRemaining;
   const rmEl = document.getElementById("statRiddle");
   rmEl.textContent = rmVal ?? "--";
@@ -323,8 +348,8 @@ function renderGeneralSettings() {
     borderRadius: "6px",
   });
   retryBtn.addEventListener("click", () => {
-    chrome.storage.local.set({ autoArena: true, alertRetryCount: 0 });
-    const tabId = state.arenaTabId;
+    chrome.storage.local.set({ autoArena_normal: true, alertRetryCount_normal: 0 });
+    const tabId = state.arenaTabId_normal;
     if (tabId) chrome.tabs.reload(tabId);
     retryBtn.textContent = "✓ Retrying...";
     setTimeout(() => { retryBtn.textContent = "🔄 Retry Battle"; }, 2000);
@@ -359,10 +384,18 @@ function renderAll() {
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
-  const current = state.arenaSweepEnabled ?? false;
+  const current = state.arenaSweepEnabled_normal ?? false;
   const next = !current;
-  state.arenaSweepEnabled = next;
-  chrome.runtime.sendMessage({ type: "SET_ARENA_SWEEP", enabled: next });
+  state.arenaSweepEnabled_normal = next;
+  chrome.runtime.sendMessage({ type: "SET_ARENA_SWEEP", enabled: next, world: "normal" });
+  renderControls();
+});
+
+document.getElementById("btnArenaIsekai").addEventListener("click", async () => {
+  const current = state.arenaSweepEnabled_isekai ?? false;
+  const next = !current;
+  state.arenaSweepEnabled_isekai = next;
+  chrome.runtime.sendMessage({ type: "SET_ARENA_SWEEP", enabled: next, world: "isekai" });
   renderControls();
 });
 

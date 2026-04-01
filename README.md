@@ -18,11 +18,12 @@ Full-featured automation with a centralized Dashboard, automatic arena sweeping,
 ### Features
 
 - **Arena Sweep** — automatically enters arena battles from easiest to hardest difficulty
+- **Normal + Isekai** — independent sweep for both worlds, can run simultaneously
 - **Dashboard** — standalone tab for control, monitoring, and configuration
-- **Encounter Coordination** — checks for encounters between arena battles (every 30 min)
+- **Encounter Coordination** — checks for encounters between Normal arena battles (every 30 min)
 - **Riddle Master Integration** — auto-solves anti-cheat challenges via API
 - **Unattended Mode** — fully autonomous operation, accepts death as recovery
-- **Floating Button** — quick start/stop toggle on battle pages
+- **Floating Button** — quick start/stop toggle on battle pages (shows world context)
 
 ### Installation
 
@@ -34,10 +35,10 @@ Full-featured automation with a centralized Dashboard, automatic arena sweeping,
 
 ### Usage
 
-1. **Dashboard** — toggle Arena Sweep, Encounter Farming, and Unattended Mode
+1. **Dashboard** — toggle Arena Sweep (Normal/Isekai), Encounter Farming, and Unattended Mode
 2. **Battle Settings** — configure skills, items, thresholds, and strategy from Dashboard
-3. **Arena Sweep** — click ON, extension handles everything: enter arena → fight → next difficulty → repeat
-4. **Encounter** — enable to auto-check e-hentai.org/news.php between arena battles
+3. **Arena Sweep** — click ON for Normal and/or Isekai, each sweeps independently
+4. **Encounter** — enable to auto-check e-hentai.org/news.php between Normal arena battles
 5. **Riddle Master** — optionally set an API key in Dashboard for priority access
 
 ### File Structure

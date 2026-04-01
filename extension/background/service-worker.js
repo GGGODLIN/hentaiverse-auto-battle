@@ -1,6 +1,10 @@
 const THIRTY_MIN = 30 * 60 * 1000;
 const ONE_MIN = 60 * 1000;
-const ARENA_URL = "https://hentaiverse.org/?s=Battle&ss=ar";
+const ARENA_URL_NORMAL = "https://hentaiverse.org/?s=Battle&ss=ar";
+const ARENA_URL_ISEKAI = "https://hentaiverse.org/isekai/?s=Battle&ss=ar";
+
+function wk(key, world) { return key + "_" + world; }
+function arenaUrl(world) { return world === "isekai" ? ARENA_URL_ISEKAI : ARENA_URL_NORMAL; }
 const NEWS_URL = "https://e-hentai.org/news.php";
 const RESET_HOUR = 8;
 
@@ -36,7 +40,8 @@ async function checkDailyReset() {
   const lastReset = await getState("lastResetDate", null);
   if (lastReset !== today) {
     await setState("lastResetDate", today);
-    await setState("arenaSweepProgress", {});
+    await setState(wk("arenaSweepProgress", "normal"), {});
+    await setState(wk("arenaSweepProgress", "isekai"), {});
     await setState("dailyStats", {
       arenaWins: 0,
       arenaLosses: 0,
@@ -66,34 +71,38 @@ async function sendToTab(tabId, message) {
 }
 
 async function handleArenaPageReady(msg, senderTabId) {
-  const sweepEnabled = await getState("arenaSweepEnabled", false);
+  const world = msg.world ?? "normal";
+  const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
   if (!sweepEnabled) return;
 
   const stamina = msg.stamina;
   const threshold = await getState("staminaThreshold", 10);
 
-  console.log("[SW] handleArenaPageReady: stamina=" + stamina + " threshold=" + threshold + " difficulties=" + (msg.difficulties?.length ?? 0));
+  console.log("[SW] handleArenaPageReady: world=" + world + " stamina=" + stamina + " threshold=" + threshold + " difficulties=" + (msg.difficulties?.length ?? 0));
   if (stamina != null && stamina < threshold) {
-    console.log("[SW] SWEEP OFF reason: stamina depleted");
-    await addLog({ type: "system", reason: "Stamina " + stamina + " below threshold " + threshold + ", pausing" });
-    await setState("arenaSweepEnabled", false);
+    console.log("[SW] SWEEP OFF reason: stamina depleted (" + world + ")");
+    await addLog({ type: "system", reason: "[" + world + "] Stamina " + stamina + " below threshold " + threshold + ", pausing" });
+    await setState(wk("arenaSweepEnabled", world), false);
     chrome.notifications.create({
       type: "basic",
-      title: "HV Auto Arena",
+      title: "HV Auto Arena (" + world + ")",
       message: "Stamina depleted (" + stamina + "), arena sweep paused.",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>⚔</text></svg>",
     });
     return;
   }
 
-  const shouldCheckEncounter = await shouldDoEncounterFirst();
-  if (shouldCheckEncounter) {
-    await setState("arenaTabId", senderTabId);
-    await doEncounterCheck();
-    return;
+  if (world === "normal") {
+    const shouldCheckEncounter = await shouldDoEncounterFirst();
+    if (shouldCheckEncounter) {
+      await setState(wk("arenaTabId", "normal"), senderTabId);
+      await doEncounterCheck();
+      return;
+    }
   }
 
-  await pickAndEnterNextDifficulty(msg.difficulties, senderTabId);
+  await setState(wk("arenaTabId", world), senderTabId);
+  await pickAndEnterNextDifficulty(msg.difficulties, senderTabId, world);
 }
 
 async function shouldDoEncounterFirst() {
@@ -106,19 +115,45 @@ async function shouldDoEncounterFirst() {
   return elapsed >= THIRTY_MIN;
 }
 
+let _encounterResponseReceived = false;
+
 async function doEncounterCheck() {
   const encounterEnabled = await getState("encounterEnabled", false);
   if (!encounterEnabled) return;
 
+  _encounterResponseReceived = false;
   await addLog({ type: "system", reason: "Checking for encounter..." });
-  const tab = await findOrCreateTab(NEWS_URL);
-  await setState("encounterTabId", tab.id);
-  await chrome.tabs.reload(tab.id);
+
+  const savedTabId = await getState("encounterTabId", null);
+  let tab = null;
+  if (savedTabId) {
+    try {
+      tab = await chrome.tabs.get(savedTabId);
+    } catch {}
+  }
+  if (tab) {
+    await chrome.tabs.update(tab.id, { url: NEWS_URL });
+  } else {
+    tab = await findOrCreateTab(NEWS_URL);
+    await setState("encounterTabId", tab.id);
+    await chrome.tabs.reload(tab.id);
+  }
+
+  setTimeout(async () => {
+    if (_encounterResponseReceived) return;
+    console.log("[SW] Encounter check timeout, no response from encounter.js");
+    await setState("lastEncounterTime", Date.now());
+    await addLog({ type: "system", reason: "Encounter check timeout, resuming" });
+    const sweepEnabled = await getState(wk("arenaSweepEnabled", "normal"), false);
+    if (sweepEnabled) {
+      await resumeArenaSweep("normal");
+    }
+  }, 15000);
 }
 
-async function pickAndEnterNextDifficulty(difficulties, tabId) {
-  const progress = await getState("arenaSweepProgress", {});
-  const available = difficulties ?? await getState("arenaDifficulties", []);
+async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
+  const progress = await getState(wk("arenaSweepProgress", world), {});
+  const available = difficulties ?? await getState(wk("arenaDifficulties", world), []);
 
   let nextDiff = null;
   for (const d of available) {
@@ -129,28 +164,28 @@ async function pickAndEnterNextDifficulty(difficulties, tabId) {
     }
   }
 
-  console.log("[SW] pickAndEnterNextDifficulty: available=" + available.length + " progress=" + JSON.stringify(progress) + " nextDiff=" + JSON.stringify(nextDiff));
+  console.log("[SW] pickAndEnterNextDifficulty: world=" + world + " available=" + available.length + " progress=" + JSON.stringify(progress) + " nextDiff=" + JSON.stringify(nextDiff));
   if (available.length === 0) {
     console.log("[SW] No difficulties found, page may not be arena. Skipping.");
     return;
   }
   if (!nextDiff) {
-    console.log("[SW] SWEEP OFF reason: all difficulties completed");
-    await addLog({ type: "victory", reason: "All arena difficulties completed!" });
-    await setState("arenaSweepEnabled", false);
+    console.log("[SW] SWEEP OFF reason: all difficulties completed (" + world + ")");
+    await addLog({ type: "victory", reason: "[" + world + "] All arena difficulties completed!" });
+    await setState(wk("arenaSweepEnabled", world), false);
     chrome.notifications.create({
       type: "basic",
-      title: "HV Auto Arena",
+      title: "HV Auto Arena (" + world + ")",
       message: "All arena difficulties completed!",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
     });
     return;
   }
 
-  await setState("currentArenaDifficulty", nextDiff.id);
+  await setState(wk("currentArenaDifficulty", world), nextDiff.id);
   progress[nextDiff.id] = "in_progress";
-  await setState("arenaSweepProgress", progress);
-  await addLog({ type: "system", reason: "Entering arena difficulty " + nextDiff.id + " (Lv." + nextDiff.level + ")" });
+  await setState(wk("arenaSweepProgress", world), progress);
+  await addLog({ type: "system", reason: "[" + world + "] Entering arena difficulty " + nextDiff.id + " (Lv." + nextDiff.level + ")" });
 
   await sendToTab(tabId, {
     type: "ENTER_ARENA",
@@ -160,6 +195,7 @@ async function pickAndEnterNextDifficulty(difficulties, tabId) {
 
 async function handleBattleComplete(msg) {
   const { result, battleType, difficultyId } = msg;
+  const world = msg.world ?? "normal";
   const stats = await getState("dailyStats", {
     arenaWins: 0, arenaLosses: 0, encounterCount: 0,
   });
@@ -176,66 +212,70 @@ async function handleBattleComplete(msg) {
       await setState("encounterBattleTabId", null);
     }
 
-    const sweepEnabled = await getState("arenaSweepEnabled", false);
+    const sweepEnabled = await getState(wk("arenaSweepEnabled", "normal"), false);
     if (sweepEnabled) {
-      await resumeArenaSweep();
+      await resumeArenaSweep("normal");
     }
     return;
   }
 
   if (battleType === "arena") {
-    const progress = await getState("arenaSweepProgress", {});
+    const progress = await getState(wk("arenaSweepProgress", world), {});
 
     if (result === "victory") {
       stats.arenaWins = (stats.arenaWins ?? 0) + 1;
       progress[difficultyId] = "completed";
-      await addLog({ type: "victory", reason: "Arena " + difficultyId + " cleared!" });
+      await addLog({ type: "victory", reason: "[" + world + "] Arena " + difficultyId + " cleared!" });
     } else {
       stats.arenaLosses = (stats.arenaLosses ?? 0) + 1;
       progress[difficultyId] = "failed";
-      await addLog({ type: "defeated", reason: "Arena " + difficultyId + " failed" });
+      await addLog({ type: "defeated", reason: "[" + world + "] Arena " + difficultyId + " failed" });
     }
 
     await setState("dailyStats", stats);
-    await setState("arenaSweepProgress", progress);
-    await setState("currentArenaDifficulty", null);
+    await setState(wk("arenaSweepProgress", world), progress);
+    await setState(wk("currentArenaDifficulty", world), null);
 
-    const sweepEnabled = await getState("arenaSweepEnabled", false);
+    const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
     if (sweepEnabled) {
       await wait(2000);
-      await resumeArenaSweep();
+      await resumeArenaSweep(world);
     }
   }
 }
 
-async function resumeArenaSweep() {
-  const arenaTabId = await getState("arenaTabId", null);
+async function resumeArenaSweep(world) {
+  const url = arenaUrl(world);
+  const arenaTabId = await getState(wk("arenaTabId", world), null);
   if (arenaTabId) {
     try {
-      await chrome.tabs.update(arenaTabId, { url: ARENA_URL });
+      await chrome.tabs.update(arenaTabId, { url });
       return;
     } catch {}
   }
-  const tab = await findOrCreateTab(ARENA_URL);
-  await setState("arenaTabId", tab.id);
+  const tab = await findOrCreateTab(url);
+  await setState(wk("arenaTabId", world), tab.id);
   await chrome.tabs.reload(tab.id);
 }
 
 async function handleEncounterFound(msg, senderTabId) {
+  _encounterResponseReceived = true;
   const { url } = msg;
   await addLog({ type: "system", reason: "Encounter found! Opening battle..." });
 
   const tab = await chrome.tabs.create({ url, active: false });
   await setState("encounterBattleTabId", tab.id);
-  await setState("battleContext", { type: "encounter" });
-  await setState("autoArena", true);
+  await setState("battleContext", { type: "encounter", world: "normal" });
+  await setState(wk("autoArena", "normal"), true);
 }
 
 async function handleNoEncounter() {
+  _encounterResponseReceived = true;
+  await setState("lastEncounterTime", Date.now());
   await addLog({ type: "system", reason: "No encounter available" });
-  const sweepEnabled = await getState("arenaSweepEnabled", false);
+  const sweepEnabled = await getState(wk("arenaSweepEnabled", "normal"), false);
   if (sweepEnabled) {
-    await resumeArenaSweep();
+    await resumeArenaSweep("normal");
   } else {
     scheduleEncounterCheck();
   }
@@ -251,97 +291,101 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE";
 
   (async () => {
-    await checkDailyReset();
+    try {
+      await checkDailyReset();
 
-    switch (msg.type) {
-      case "ARENA_PAGE_READY":
-        await handleArenaPageReady(msg, senderTabId);
-        break;
+      switch (msg.type) {
+        case "ARENA_PAGE_READY":
+          await handleArenaPageReady(msg, senderTabId);
+          break;
 
+        case "BATTLE_COMPLETE":
+          await handleBattleComplete(msg);
+          break;
 
-      case "BATTLE_COMPLETE":
-        await handleBattleComplete(msg);
-        break;
+        case "BATTLE_STATUS":
+          break;
 
-      case "BATTLE_STATUS":
-        break;
-
-      case "BATTLE_ALERT": {
-        const { title, body } = msg;
-        const unattended = await getState("unattendedMode", false);
-        chrome.notifications.create({
-          type: "basic",
-          title: "HV: " + title,
-          message: body + (unattended ? " (unattended)" : ""),
-          iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>⚠</text></svg>",
-          requireInteraction: !unattended && (msg.isUrgent ?? false),
-        });
-        if (!unattended) {
-          await addLog({ type: "alert", reason: "Needs attention: " + title + " — " + body });
+        case "BATTLE_ALERT": {
+          const { title, body } = msg;
+          const alertWorld = msg.world ?? "normal";
+          const unattended = await getState("unattendedMode", false);
+          chrome.notifications.create({
+            type: "basic",
+            title: "HV [" + alertWorld + "]: " + title,
+            message: body + (unattended ? " (unattended)" : ""),
+            iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>⚠</text></svg>",
+            requireInteraction: !unattended && (msg.isUrgent ?? false),
+          });
+          if (!unattended) {
+            await addLog({ type: "alert", reason: "Needs attention: " + title + " — " + body });
+          }
+          break;
         }
-        break;
-      }
 
-      case "BATTLE_ERROR":
-        await addLog({ type: "alert", reason: msg.error });
-        break;
+        case "BATTLE_ERROR":
+          await addLog({ type: "alert", reason: msg.error });
+          break;
 
-      case "ENCOUNTER_FOUND":
-        await handleEncounterFound(msg, senderTabId);
-        break;
+        case "ENCOUNTER_FOUND":
+          await handleEncounterFound(msg, senderTabId);
+          break;
 
-      case "NO_ENCOUNTER":
-        await handleNoEncounter();
-        break;
+        case "NO_ENCOUNTER":
+          console.log("[SW] NO_ENCOUNTER received, calling handleNoEncounter");
+          await handleNoEncounter();
+          break;
 
-      case "GET_FULL_STATE": {
-        const allData = await chrome.storage.local.get(null);
-        sendResponse(allData);
-        return;
-      }
-
-      case "SET_ARENA_SWEEP": {
-        console.log("[SW] SET_ARENA_SWEEP enabled=" + msg.enabled);
-        await setState("arenaSweepEnabled", msg.enabled);
-        if (msg.enabled) {
-          await setState("autoArena", true);
-          await setState("arenaSweepProgress", {});
-          await addLog({ type: "system", reason: "Arena sweep started" });
-          await resumeArenaSweep();
-        } else {
-          console.log("[SW] SWEEP OFF reason: user toggled off");
-          await setState("autoArena", false);
-          await addLog({ type: "system", reason: "Arena sweep stopped" });
+        case "GET_FULL_STATE": {
+          const allData = await chrome.storage.local.get(null);
+          sendResponse(allData);
+          return;
         }
-        break;
-      }
 
-      case "SET_ENCOUNTER": {
-        await setState("encounterEnabled", msg.enabled);
-        if (msg.enabled) {
-          await addLog({ type: "system", reason: "Encounter farming started" });
-          await doEncounterCheck();
-        } else {
-          chrome.alarms.clear("encounterCheck");
-          await addLog({ type: "system", reason: "Encounter farming stopped" });
+        case "SET_ARENA_SWEEP": {
+          const world = msg.world ?? "normal";
+          console.log("[SW] SET_ARENA_SWEEP enabled=" + msg.enabled + " world=" + world);
+          await setState(wk("arenaSweepEnabled", world), msg.enabled);
+          if (msg.enabled) {
+            await setState(wk("autoArena", world), true);
+            await setState(wk("arenaSweepProgress", world), {});
+            await addLog({ type: "system", reason: "[" + world + "] Arena sweep started" });
+            await resumeArenaSweep(world);
+          } else {
+            console.log("[SW] SWEEP OFF reason: user toggled off (" + world + ")");
+            await setState(wk("autoArena", world), false);
+            await addLog({ type: "system", reason: "[" + world + "] Arena sweep stopped" });
+          }
+          break;
         }
-        break;
-      }
 
-      case "UPDATE_TOGGLES":
-        await setState("battleToggles", msg.toggles);
-        break;
-
-      case "UPDATE_SETTINGS":
-        for (const [k, v] of Object.entries(msg.settings)) {
-          await setState(k, v);
+        case "SET_ENCOUNTER": {
+          await setState("encounterEnabled", msg.enabled);
+          if (msg.enabled) {
+            await addLog({ type: "system", reason: "Encounter farming started" });
+            await doEncounterCheck();
+          } else {
+            chrome.alarms.clear("encounterCheck");
+            await addLog({ type: "system", reason: "Encounter farming stopped" });
+          }
+          break;
         }
-        break;
 
-      case "RM_SOLVE": {
-        try {
+        case "UPDATE_TOGGLES":
+          await setState("battleToggles", msg.toggles);
+          break;
+
+        case "UPDATE_SETTINGS":
+          for (const [k, v] of Object.entries(msg.settings)) {
+            await setState(k, v);
+          }
+          break;
+
+        case "RM_SOLVE": {
+          try {
           const base64 = msg.imageBase64;
           const byteString = atob(base64.split(",")[1]);
           const ab = new ArrayBuffer(byteString.length);
@@ -397,18 +441,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break;
       }
     }
+    } catch (e) {
+      console.error("[SW] Message handler error:", e);
+    }
   })();
 
-  return true;
+  return needsResponse;
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "encounterCheck") {
     const enabled = await getState("encounterEnabled", false);
     if (!enabled) return;
-    const sweepRunning = await getState("arenaSweepEnabled", false);
+    const sweepRunning = await getState(wk("arenaSweepEnabled", "normal"), false);
     if (sweepRunning) return;
-    const inBattle = await getState("autoArena", false);
+    const inBattle = await getState(wk("autoArena", "normal"), false);
     if (inBattle) {
       scheduleEncounterCheck();
       return;

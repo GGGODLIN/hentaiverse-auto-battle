@@ -44,7 +44,13 @@
   async function init() {
     await initCache();
 
-    if (!storeGet("encounterEnabled", false)) return;
+    const encounterEnabled = storeGet("encounterEnabled", false);
+    const sweepEnabled = storeGet("arenaSweepEnabled", false);
+    console.log("[encounter.js] init: encounterEnabled=" + encounterEnabled + " sweepEnabled=" + sweepEnabled);
+    if (!encounterEnabled && !sweepEnabled) {
+      console.log("[encounter.js] skipped: neither enabled");
+      return;
+    }
 
     if (hasEncounter()) {
       const url = getEncounterUrl();
@@ -58,9 +64,10 @@
         if (pane) pane.style.display = "none";
       }
     } else {
+      console.log("[encounter.js] no encounter, sending NO_ENCOUNTER");
       chrome.runtime.sendMessage({
         type: "NO_ENCOUNTER",
-      }).catch(() => {});
+      }).catch((e) => console.log("[encounter.js] sendMessage failed:", e));
     }
 
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

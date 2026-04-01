@@ -1,6 +1,9 @@
 (() => {
   if (!location.hostname.includes("hentaiverse")) return;
 
+  const WORLD = location.pathname.includes("/isekai/") ? "isekai" : "normal";
+  const wk = (key) => key + "_" + WORLD;
+
   const _cache = {};
   let _cacheReady = false;
 
@@ -94,7 +97,7 @@
       String(now.getSeconds()).padStart(2, "0");
     storeSet("lastBattleStatus", { type, reason, time });
     addLog({ type, reason });
-    notifySW("BATTLE_STATUS", { status: { type, reason, time } });
+    notifySW("BATTLE_STATUS", { status: { type, reason, time }, world: WORLD });
   }
 
   const isInBattle = () => !!document.getElementById("ckey_attack");
@@ -131,7 +134,7 @@
   };
 
   function getToggles() {
-    const saved = storeGet("battleToggles", {});
+    const saved = storeGet(wk("battleToggles"), {});
     return { ...DEFAULT_TOGGLES, ...saved };
   }
 
@@ -227,48 +230,49 @@
     let successActions = 0;
 
     function retryOrAlert(title, body, isUrgent = false) {
-      const count = storeGet("alertRetryCount", 0);
+      const count = storeGet(wk("alertRetryCount"), 0);
       const rs = readState();
       console.log("[AA] ALERT " + title + " (retry " + (count + 1) + "/3): " + body +
         " hpP=" + rs.hpP + " mpP=" + rs.mpP + " spP=" + rs.spP);
       if (count < 2) {
         setStatus("reload", title + " (" + (count + 1) + "/3)");
-        storeSet("alertRetryCount", count + 1);
+        storeSet(wk("alertRetryCount"), count + 1);
         location.reload();
         return true;
       }
-      storeSet("alertRetryCount", 0);
+      storeSet(wk("alertRetryCount"), 0);
 
       const unattended = storeGet("unattendedMode", false);
       if (unattended) {
         setStatus("alert", title + ": " + body + " (unattended, continuing)");
         addLog({ type: "alert", reason: title + ": " + body + " — unattended, continuing" });
-        notifySW("BATTLE_ALERT", { title, body, isUrgent });
+        notifySW("BATTLE_ALERT", { title, body, isUrgent, world: WORLD });
         return true;
       }
 
-      storeSet("autoArena", false);
+      storeSet(wk("autoArena"), false);
       setStatus("alert", title + ": " + body);
-      notifySW("BATTLE_ALERT", { title, body, isUrgent });
+      notifySW("BATTLE_ALERT", { title, body, isUrgent, world: WORLD });
       return false;
     }
 
     try {
       while (true) {
-        if (!storeGet("autoArena", false)) break;
+        if (!storeGet(wk("autoArena"), false)) break;
 
         const s = readState();
 
         if (s.hpP <= 0 && Object.keys(s.buffs).length === 0) {
           console.log("[AA] DEFEATED: hpP=" + s.hpP + " alive=" + s.alive.length);
-          storeSet("autoArena", false);
-          storeSet("alertRetryCount", 0);
+          storeSet(wk("autoArena"), false);
+          storeSet(wk("alertRetryCount"), 0);
           setStatus("defeated", "You have been defeated");
           const ctx = storeGet("battleContext", {});
           notifySW("BATTLE_COMPLETE", {
             result: "defeated",
             battleType: ctx.type,
             difficultyId: ctx.difficultyId,
+            world: WORLD,
           });
           return;
         }
@@ -312,22 +316,23 @@
           }
         }
 
-        if (storeGet("alertRetryCount", 0) > 0 && s.buffs["Spark of Life"] && s.hpP >= 50) {
+        if (storeGet(wk("alertRetryCount"), 0) > 0 && s.buffs["Spark of Life"] && s.hpP >= 50) {
           console.log("[AA] Recovered after retry, resetting counter");
-          storeSet("alertRetryCount", 0);
+          storeSet(wk("alertRetryCount"), 0);
         }
 
         if (s.victory) {
           await waitFor(() => document.getElementById("btcp"), 300, 3000);
           if (isLastRoundVictory()) {
-            storeSet("autoArena", false);
-            storeSet("alertRetryCount", 0);
+            storeSet(wk("autoArena"), false);
+            storeSet(wk("alertRetryCount"), 0);
             const ctx = storeGet("battleContext", {});
             setStatus("victory", "Arena cleared!");
             notifySW("BATTLE_COMPLETE", {
               result: "victory",
               battleType: ctx.type,
               difficultyId: ctx.difficultyId,
+              world: WORLD,
             });
             return;
           }
@@ -430,7 +435,7 @@
 
             if (sr.buffs["Spark of Life"]) {
               console.log("[AA] Spark recovered via replenish");
-              storeSet("alertRetryCount", 0);
+              storeSet(wk("alertRetryCount"), 0);
               continue;
             }
 
@@ -623,9 +628,9 @@
           }
 
           successActions++;
-          if (successActions >= 3 && storeGet("alertRetryCount", 0) > 0) {
+          if (successActions >= 3 && storeGet(wk("alertRetryCount"), 0) > 0) {
             console.log("[AA] Stable combat, resetting retry counter");
-            storeSet("alertRetryCount", 0);
+            storeSet(wk("alertRetryCount"), 0);
             successActions = 0;
           }
         } else {
@@ -687,9 +692,12 @@
         if (checkbox) checkbox.checked = true;
       }
 
+      const submitBtn = document.getElementById("riddlesubmit");
+      if (submitBtn) submitBtn.disabled = false;
+
       const delay = 1000 + Math.random() * 2000;
       await wait(delay);
-      document.getElementById("riddlesubmit")?.click();
+      submitBtn?.click();
       addLog({ type: "info", reason: "Riddle Master: submitted answer " + JSON.stringify(answers) });
       return true;
     } catch (e) {
@@ -716,11 +724,12 @@
     }
 
     setStatus("alert", "Riddle Master not resolved after 60s");
-    storeSet("autoArena", false);
+    storeSet(wk("autoArena"), false);
     notifySW("BATTLE_ALERT", {
       title: "RIDDLE MASTER",
       body: "Anti-cheat not resolved after 60s!",
       isUrgent: true,
+      world: WORLD,
     });
   }
 
@@ -748,18 +757,19 @@
     });
     document.body.appendChild(btn);
 
+    const label = WORLD === "isekai" ? "ISEKAI" : "AUTO";
     function syncButton() {
-      const on = storeGet("autoArena", false);
-      btn.textContent = on ? "⚔ AUTO ON" : "⚔ AUTO OFF";
+      const on = storeGet(wk("autoArena"), false);
+      btn.textContent = on ? "⚔ " + label + " ON" : "⚔ " + label + " OFF";
       btn.style.background = on ? "#2a7f3e" : "#9b2335";
     }
 
     syncButton();
 
     btn.addEventListener("click", () => {
-      const nowOn = storeGet("autoArena", false);
+      const nowOn = storeGet(wk("autoArena"), false);
       const next = !nowOn;
-      storeSet("autoArena", next);
+      storeSet(wk("autoArena"), next);
       if (next && isInBattle()) {
         startBattle();
       }
@@ -767,20 +777,20 @@
     });
 
     chrome.storage.onChanged.addListener((changes) => {
-      if ("autoArena" in changes) {
+      if (wk("autoArena") in changes) {
         syncButton();
-        if (changes.autoArena.newValue && isInBattle()) {
+        if (changes[wk("autoArena")].newValue && isInBattle()) {
           startBattle();
         }
       }
     });
 
-    if (isRiddleMaster() && storeGet("autoArena", false)) {
+    if (isRiddleMaster() && storeGet(wk("autoArena"), false)) {
       handleRiddleMaster();
       return;
     }
 
-    if (storeGet("autoArena", false)) {
+    if (storeGet(wk("autoArena"), false)) {
       const found = await waitFor(
         () => document.getElementById("ckey_attack"),
         300,
@@ -791,16 +801,16 @@
       } else if (location.search.includes("s=Battle")) {
         // On arena page, not battle — let arena.js handle it
       } else {
-        storeSet("autoArena", false);
-        storeSet("alertRetryCount", 0);
+        storeSet(wk("autoArena"), false);
+        storeSet(wk("alertRetryCount"), 0);
         setStatus("alert", "Battle not found after reload");
-        notifySW("BATTLE_ERROR", { error: "Battle not found" });
+        notifySW("BATTLE_ERROR", { error: "Battle not found", world: WORLD });
       }
     }
 
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === "START_BATTLE") {
-        storeSet("autoArena", true);
+        storeSet(wk("autoArena"), true);
         if (isInBattle()) {
           startBattle();
         }
@@ -808,7 +818,7 @@
         sendResponse({ ok: true });
       }
       if (msg.type === "STOP_BATTLE") {
-        storeSet("autoArena", false);
+        storeSet(wk("autoArena"), false);
         syncButton();
         sendResponse({ ok: true });
       }

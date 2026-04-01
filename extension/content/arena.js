@@ -2,6 +2,9 @@
   if (!location.hostname.includes("hentaiverse")) return;
   if (!location.search.includes("s=Battle") || !location.search.includes("ss=ar")) return;
 
+  const WORLD = location.pathname.includes("/isekai/") ? "isekai" : "normal";
+  const wk = (key) => key + "_" + WORLD;
+
   const _cache = {};
 
   async function initCache() {
@@ -30,7 +33,7 @@
     const imgs = document.querySelectorAll("table img[onclick]");
     for (const img of imgs) {
       const onclick = img.getAttribute("onclick") ?? "";
-      const match = onclick.match(/init_battle\((\d+),\s*(\d+),\s*'([^']+)'\)/);
+      const match = onclick.match(/init_battle\((\d+)(?:,\s*(\d+))?(?:,\s*'([^']+)')?\)/);
       if (!match) continue;
       const row = img.closest("tr");
       if (!row) continue;
@@ -39,8 +42,8 @@
       const lvMatch = lvText.match(/(\d+)/);
       results.push({
         id: parseInt(match[1]),
-        entryCost: parseInt(match[2]),
-        token: match[3],
+        entryCost: match[2] ? parseInt(match[2]) : 0,
+        token: match[3] ?? "",
         level: lvMatch ? parseInt(lvMatch[1]) : 0,
       });
     }
@@ -59,12 +62,12 @@
     const form = document.getElementById("initform");
     if (!form) return false;
     const initId = form.querySelector('input[name="initid"]');
-    const initToken = form.querySelector('input[name="inittoken"]');
-    if (!initId || !initToken) return false;
+    if (!initId) return false;
     initId.value = difficultyId;
-    initToken.value = token;
-    storeSet("autoArena", true);
-    storeSet("battleContext", { type: "arena", difficultyId });
+    const initToken = form.querySelector('input[name="inittoken"]');
+    if (initToken && token) initToken.value = token;
+    storeSet(wk("autoArena"), true);
+    storeSet("battleContext", { type: "arena", difficultyId, world: WORLD });
     form.submit();
     return true;
   }
@@ -79,16 +82,18 @@
 
     const difficulties = parseDifficulties();
     const stamina = parseStamina();
+    console.log("[arena.js] world=" + WORLD + " difficulties=" + difficulties.length + " stamina=" + stamina);
 
-    storeSet("arenaDifficulties", difficulties);
+    storeSet(wk("arenaDifficulties"), difficulties);
     if (stamina != null) {
-      storeSet("currentStamina", stamina);
+      storeSet(wk("currentStamina"), stamina);
     }
 
     chrome.runtime.sendMessage({
       type: "ARENA_PAGE_READY",
       difficulties,
       stamina,
+      world: WORLD,
     }).catch(() => {});
 
     chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
