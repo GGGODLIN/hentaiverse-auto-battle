@@ -267,7 +267,7 @@
           storeSet(wk("autoArena"), false);
           storeSet(wk("alertRetryCount"), 0);
           setStatus("defeated", "You have been defeated");
-          const ctx = storeGet("battleContext", {});
+          const ctx = storeGet(wk("battleContext"), null) ?? storeGet("battleContext", {});
           notifySW("BATTLE_COMPLETE", {
             result: "defeated",
             battleType: ctx.type,
@@ -324,9 +324,10 @@
         if (s.victory) {
           await waitFor(() => document.getElementById("btcp"), 300, 3000);
           if (isLastRoundVictory()) {
-            storeSet(wk("autoArena"), false);
+            const sweepOn = storeGet(wk("arenaSweepEnabled"), false);
+            if (!sweepOn) storeSet(wk("autoArena"), false);
             storeSet(wk("alertRetryCount"), 0);
-            const ctx = storeGet("battleContext", {});
+            const ctx = storeGet(wk("battleContext"), null) ?? storeGet("battleContext", {});
             setStatus("victory", "Arena cleared!");
             notifySW("BATTLE_COMPLETE", {
               result: "victory",

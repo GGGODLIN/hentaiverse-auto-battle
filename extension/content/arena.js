@@ -58,7 +58,7 @@
     return match ? parseInt(match[1]) : null;
   }
 
-  function enterArena(difficultyId, token) {
+  async function enterArena(difficultyId, token) {
     const form = document.getElementById("initform");
     if (!form) return false;
     const initId = form.querySelector('input[name="initid"]');
@@ -66,8 +66,10 @@
     initId.value = difficultyId;
     const initToken = form.querySelector('input[name="inittoken"]');
     if (initToken && token) initToken.value = token;
-    storeSet(wk("autoArena"), true);
-    storeSet("battleContext", { type: "arena", difficultyId, world: WORLD });
+    await chrome.storage.local.set({
+      [wk("autoArena")]: true,
+      [wk("battleContext")]: { type: "arena", difficultyId, world: WORLD },
+    });
     form.submit();
     return true;
   }

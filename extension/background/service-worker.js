@@ -83,6 +83,7 @@ async function handleArenaPageReady(msg, senderTabId) {
     console.log("[SW] SWEEP OFF reason: stamina depleted (" + world + ")");
     await addLog({ type: "system", reason: "[" + world + "] Stamina " + stamina + " below threshold " + threshold + ", pausing" });
     await setState(wk("arenaSweepEnabled", world), false);
+    await setState(wk("autoArena", world), false);
     chrome.notifications.create({
       type: "basic",
       title: "HV Auto Arena (" + world + ")",
@@ -166,13 +167,17 @@ async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
 
   console.log("[SW] pickAndEnterNextDifficulty: world=" + world + " available=" + available.length + " progress=" + JSON.stringify(progress) + " nextDiff=" + JSON.stringify(nextDiff));
   if (available.length === 0) {
-    console.log("[SW] No difficulties found, page may not be arena. Skipping.");
+    console.log("[SW] No difficulties found (" + world + "), turning off sweep");
+    await addLog({ type: "system", reason: "[" + world + "] No arena difficulties available" });
+    await setState(wk("arenaSweepEnabled", world), false);
+    await setState(wk("autoArena", world), false);
     return;
   }
   if (!nextDiff) {
     console.log("[SW] SWEEP OFF reason: all difficulties completed (" + world + ")");
     await addLog({ type: "victory", reason: "[" + world + "] All arena difficulties completed!" });
     await setState(wk("arenaSweepEnabled", world), false);
+    await setState(wk("autoArena", world), false);
     chrome.notifications.create({
       type: "basic",
       title: "HV Auto Arena (" + world + ")",
@@ -237,6 +242,28 @@ async function handleBattleComplete(msg) {
     await setState(wk("currentArenaDifficulty", world), null);
 
     const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
+    if (!sweepEnabled) return;
+
+    const allDiffs = await getState(wk("arenaDifficulties", world), []);
+    const allDone = allDiffs.length > 0 && allDiffs.every((d) => {
+      const s = progress[d.id];
+      return s === "completed" || s === "failed" || s === "skipped";
+    });
+
+    if (allDone) {
+      console.log("[SW] All difficulties done for " + world + ", ending sweep");
+      await addLog({ type: "victory", reason: "[" + world + "] All arena difficulties completed!" });
+      await setState(wk("arenaSweepEnabled", world), false);
+      await setState(wk("autoArena", world), false);
+      chrome.notifications.create({
+        type: "basic",
+        title: "HV Auto Arena (" + world + ")",
+        message: "All arena difficulties completed!",
+        iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
+      });
+      return;
+    }
+
     if (sweepEnabled) {
       await wait(2000);
       await resumeArenaSweep(world);
@@ -265,7 +292,7 @@ async function handleEncounterFound(msg, senderTabId) {
 
   const tab = await chrome.tabs.create({ url, active: false });
   await setState("encounterBattleTabId", tab.id);
-  await setState("battleContext", { type: "encounter", world: "normal" });
+  await setState(wk("battleContext", "normal"), { type: "encounter", world: "normal" });
   await setState(wk("autoArena", "normal"), true);
 }
 
@@ -454,7 +481,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const enabled = await getState("encounterEnabled", false);
     if (!enabled) return;
     const sweepRunning = await getState(wk("arenaSweepEnabled", "normal"), false);
-    if (sweepRunning) return;
+    if (sweepRunning) {
+      scheduleEncounterCheck();
+      return;
+    }
     const inBattle = await getState(wk("autoArena", "normal"), false);
     if (inBattle) {
       scheduleEncounterCheck();
