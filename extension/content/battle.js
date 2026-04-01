@@ -29,11 +29,7 @@
   let _bridgeId = 0;
   const _bridgeCallbacks = {};
 
-  function injectPageScript() {
-    const s = document.createElement("script");
-    s.src = chrome.runtime.getURL("content/inject.js");
-    (document.head ?? document.documentElement).appendChild(s);
-    s.onload = () => s.remove();
+  function initBridge() {
     window.addEventListener("__hv_resp", (e) => {
       const { id } = e.detail;
       if (id && _bridgeCallbacks[id]) {
@@ -122,13 +118,13 @@
     ikey1: true, ikey2: true, ikey3: true, ikey4: true,
     ikey5: true, ikey6: true, ikey7: true, ikey8: true,
     ikey9: true, ikeyP: true,
-    sparkOfLife: false,
+    sparkOfLife: true,
     priorityTargets: "Yggdrasil",
     hpThreshold: 50,
-    mpThreshold: 30,
-    spThreshold: 70,
-    spPotThreshold: 50,
-    ocThreshold: 80,
+    mpThreshold: 50,
+    spThreshold: 80,
+    spPotThreshold: 55,
+    ocThreshold: 90,
     channelingSkill: "qb2",
     targetStrategy: "focus",
     actionDelay: 300,
@@ -658,37 +654,24 @@
       const imgResp = await fetch(imgSrc, { credentials: "same-origin" });
       const blob = await imgResp.blob();
 
-      const apiKey = storeGet("rmApiKey", "");
-      const headers = { "Content-Type": "image/jpeg" };
-      if (apiKey) headers["apikey"] = apiKey;
-
-      const apiResp = await fetch("https://rdma.ooguy.com/help2", {
-        method: "POST",
-        headers,
-        body: blob,
+      const reader = new FileReader();
+      const base64 = await new Promise((resolve) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
       });
 
-      if (apiResp.status === 429) {
-        addLog({ type: "alert", reason: "Riddle Master API: rate limited (429)" });
+      const rmResult = await chrome.runtime.sendMessage({
+        type: "RM_SOLVE",
+        imageBase64: base64,
+        apiKey: storeGet("rmApiKey", ""),
+      });
+
+      if (!rmResult || rmResult.error) {
+        addLog({ type: "alert", reason: "Riddle Master API: " + (rmResult?.error ?? "no response") });
         return false;
       }
 
-      const remaining = apiResp.headers.get("x-ratelimit-remaining");
-      if (remaining !== null) {
-        storeSet("riddleMasterRemaining", parseInt(remaining));
-      }
-
-      const data = await apiResp.json();
-
-      if (data.return === "finish") {
-        addLog({ type: "alert", reason: "Riddle Master API: daily limit reached" });
-        return false;
-      }
-
-      if (data.return !== "good") {
-        addLog({ type: "alert", reason: "Riddle Master API error: " + JSON.stringify(data.return) });
-        return false;
-      }
+      const data = rmResult.data;
 
       const riddler1 = document.getElementById("riddler1");
       if (!riddler1) {
@@ -743,7 +726,7 @@
 
   async function init() {
     await initCache();
-    injectPageScript();
+    initBridge();
 
     const btn = document.createElement("div");
     btn.id = "autoArenaBtn";
@@ -784,7 +767,12 @@
     });
 
     chrome.storage.onChanged.addListener((changes) => {
-      if ("autoArena" in changes) syncButton();
+      if ("autoArena" in changes) {
+        syncButton();
+        if (changes.autoArena.newValue && isInBattle()) {
+          startBattle();
+        }
+      }
     });
 
     if (isRiddleMaster() && storeGet("autoArena", false)) {

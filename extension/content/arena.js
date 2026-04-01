@@ -72,6 +72,11 @@
   async function init() {
     await initCache();
 
+    if (document.getElementById("ckey_attack")) {
+      console.log("[arena.js] In battle, skipping arena init");
+      return;
+    }
+
     const difficulties = parseDifficulties();
     const stamina = parseStamina();
 
@@ -102,9 +107,6 @@
       return true;
     });
 
-    if (storeGet("arenaSweepEnabled", false)) {
-      chrome.runtime.sendMessage({ type: "ARENA_SWEEP_READY" }).catch(() => {});
-    }
   }
 
   init();

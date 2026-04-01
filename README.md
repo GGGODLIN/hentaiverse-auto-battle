@@ -2,49 +2,98 @@
 
 # HV Auto Battle & Encounter
 
-Tampermonkey userscript for automating HentaiVerse Arena battles and encounter farming on E-Hentai. Supports both Normal and Isekai modes.
+Automation toolkit for HentaiVerse Arena battles and encounter farming on E-Hentai. Available in two modes:
 
-## Features
+| Mode | Install | Features |
+|------|---------|----------|
+| **Chrome Extension** | Load unpacked `extension/` | Dashboard, Arena Sweep, Encounter coordination, Riddle Master API, Unattended Mode |
+| **Tampermonkey** | Paste `autoArena.user.js` | Standalone battle engine with floating settings panel |
 
-### ⚔ Arena Auto Battle (`hentaiverse.org`)
+---
+
+## Chrome Extension (Recommended)
+
+Full-featured automation with a centralized Dashboard, automatic arena sweeping, and coordinated encounter farming.
+
+### Features
+
+- **Arena Sweep** — automatically enters arena battles from easiest to hardest difficulty
+- **Dashboard** — standalone tab for control, monitoring, and configuration
+- **Encounter Coordination** — checks for encounters between arena battles (every 30 min)
+- **Riddle Master Integration** — auto-solves anti-cheat challenges via API
+- **Unattended Mode** — fully autonomous operation, accepts death as recovery
+- **Floating Button** — quick start/stop toggle on battle pages
+
+### Installation
+
+1. Clone or download this repository
+2. Open `chrome://extensions` in Chrome
+3. Enable **Developer mode** (top-right toggle)
+4. Click **Load unpacked** → select the `extension/` folder
+5. Click the extension icon to open Dashboard
+
+### Usage
+
+1. **Dashboard** — toggle Arena Sweep, Encounter Farming, and Unattended Mode
+2. **Battle Settings** — configure skills, items, thresholds, and strategy from Dashboard
+3. **Arena Sweep** — click ON, extension handles everything: enter arena → fight → next difficulty → repeat
+4. **Encounter** — enable to auto-check e-hentai.org/news.php between arena battles
+5. **Riddle Master** — optionally set an API key in Dashboard for priority access
+
+### File Structure
+
+```
+extension/
+├── manifest.json              MV3 manifest
+├── background/
+│   └── service-worker.js      Central scheduler
+├── content/
+│   ├── inject.js              XHR hook (MAIN world, document_start)
+│   ├── battle.js              Battle engine (hentaiverse.org)
+│   ├── arena.js               Arena entry (hentaiverse.org?s=Battle&ss=ar)
+│   └── encounter.js           Encounter detection (e-hentai.org/news.php)
+└── dashboard/
+    ├── index.html             Dashboard UI
+    ├── app.js                 Dashboard logic
+    └── style.css              Dark theme
+```
+
+---
+
+## Tampermonkey (Standalone Battle Engine)
+
+Lightweight userscript for manual arena battles and encounter farming. No arena sweep or dashboard — you enter each battle manually.
+
+### Features
+
 - Fully automated combat with priority-based action system
-- Auto-continues to next round between waves
-- **Stops on last round** — won't navigate away from results
-- Elite/boss priority targeting
-- CD-aware skill & item usage (skipped when on cooldown)
-- Channeling buff detection — casts Heartseeker for free when proc'd
-- Spirit stance management
-- **Settings panel** — toggle individual skills/potions on or off
-- **Isekai mode** — auto-detected with separate toggle profile
+- Auto-continues between rounds
+- Stops on last round — won't navigate away from results
+- Settings panel with per-skill toggles
+- Encounter auto-refresh on e-hentai.org/news.php
+- Anti-cheat detection (Riddle Master, idle loop, low HP)
+- Triple alert: sound beeps + browser notification + tab title flash
 
-### 🎯 Encounter Auto Refresh (`e-hentai.org/news.php`)
-- Timer-based page refresh every 30 minutes
-- Auto-detects monster encounters and opens battle popup
-- Auto-enables battle mode in the popup window
-- Countdown display on floating button
-- Falls back to 1-minute retry if encounter doesn't appear on time
-- Alert sound plays from news.php when battle ends (bypasses popup autoplay restriction)
+### Installation
 
-### 🚨 Anti-Cheat Protection
-- **Riddle Master** detection on page load
-- **Idle loop** detection (battle stalled)
-- **Low HP** — stops when all heals are on CD
-- **Triple alert**: sound beeps + browser notification + tab title flash
+1. Install [Tampermonkey](https://www.tampermonkey.net/)
+2. Create a new script → paste contents of `autoArena.user.js`
+3. Save (Ctrl+S)
 
-## Installation
+### Usage
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/) browser extension
-2. Click the Tampermonkey icon → Create a new script
-3. Replace all content with the contents of `autoArena.user.js`
-4. Save (Ctrl+S)
+1. Enter an Arena battle on `hentaiverse.org`
+2. Click `⚔ AUTO OFF` (bottom-right) to start
+3. Click `⚙` to toggle skills/potions
+4. For encounters: go to `e-hentai.org/news.php` → click `🎯 ENCOUNTER OFF`
+
+---
 
 ## Setup Requirements
 
-The script relies on fixed quick button and item slot positions. Configure your in-game settings as follows before use:
+Both modes rely on fixed quick button and item slot positions:
 
 ### Quick Buttons
-
-![Quick button setup](screenshots/quick_buttons.png)
 
 | Slot | Skill |
 |------|-------|
@@ -58,8 +107,6 @@ The script relies on fixed quick button and item slot positions. Configure your 
 
 ### Item Slots
 
-![Item slot setup](screenshots/item_slots.png)
-
 | Slot | Item |
 |------|------|
 | 1 | Health Draught |
@@ -68,59 +115,20 @@ The script relies on fixed quick button and item slot positions. Configure your 
 | 4 | Mana Potion |
 | 5 | Spirit Draught |
 
-## Usage
-
-### Arena Battle
-1. Enter an Arena battle on `hentaiverse.org`
-2. Click the `⚔ AUTO OFF` button (bottom-right) to start
-3. Click the `⚙` button to open settings — toggle skills/potions as needed
-4. Script fights automatically and continues between rounds
-5. Stops when arena is cleared or anti-cheat is detected
-
-### Encounter Farming
-1. Go to `e-hentai.org/news.php`
-2. Click the `🎯 ENCOUNTER OFF` button (bottom-right) to enable
-3. Button shows countdown timer until next refresh
-4. When a monster encounter appears, it auto-opens the battle and fights it
-
-### Settings Panel
-
-Click `⚙` to open. Auto-detects Normal/Isekai mode with separate profiles.
-
-Each skill and potion can be independently toggled:
-- 🟢 Enabled — action will be used in combat
-- 🔴 Disabled — action is skipped entirely
-
-Toggle states persist across page refreshes.
-
 ## Combat Priority
 
 | Priority | Condition | Action |
 |----------|-----------|--------|
 | 1 | HP < 50% | Heal (qb3 → qb4 → Health Potion) |
 | 2 | Channeling buff active | Cast Heartseeker (free MP) |
-| 3 | MP < 30% | Mana Potion |
+| 3 | MP < 50% | Mana Potion |
 | 4 | No Regeneration buff | Health Draught |
 | 5 | No Replenishment buff | Mana Draught |
-| 6 | SP < 70%, no Refreshment | Spirit Draught |
+| 6 | SP < 80%, no Refreshment | Spirit Draught |
 | 7 | Regen ≤ 3 turns | Recast |
 | 8 | Heartseeker ≤ 3 turns | Recast |
-| 9 | OC > 80%, spirit inactive | Activate spirit |
+| 9 | OC > 90%, spirit inactive | Activate spirit |
 | 10 | — | Attack skill (qb7→qb8→qb9) or normal attack |
-
-**Attack skill targeting**: Elite first, then highest HP monster
-**Normal attack targeting**: Elite first, then first alive monster
-
-## GM Storage Keys
-
-| Key | Mode | Purpose |
-|-----|------|---------|
-| `autoArena` | Battle | Auto-fight toggle |
-| `autoEncounter` | Encounter | Auto-refresh toggle |
-| `lastEncounterTime` | Encounter | Last encounter timestamp |
-| `nextRefreshTime` | Encounter | Target time for next refresh |
-| `battleToggles_normal` | Battle | Normal mode toggle states |
-| `battleToggles_isekai` | Battle | Isekai mode toggle states |
 
 ## License
 

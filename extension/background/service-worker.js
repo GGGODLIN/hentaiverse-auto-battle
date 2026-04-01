@@ -72,7 +72,9 @@ async function handleArenaPageReady(msg, senderTabId) {
   const stamina = msg.stamina;
   const threshold = await getState("staminaThreshold", 10);
 
+  console.log("[SW] handleArenaPageReady: stamina=" + stamina + " threshold=" + threshold + " difficulties=" + (msg.difficulties?.length ?? 0));
   if (stamina != null && stamina < threshold) {
+    console.log("[SW] SWEEP OFF reason: stamina depleted");
     await addLog({ type: "system", reason: "Stamina " + stamina + " below threshold " + threshold + ", pausing" });
     await setState("arenaSweepEnabled", false);
     chrome.notifications.create({
@@ -96,10 +98,11 @@ async function handleArenaPageReady(msg, senderTabId) {
 
 async function shouldDoEncounterFirst() {
   const encounterEnabled = await getState("encounterEnabled", false);
-  if (!encounterEnabled) return false;
-
   const lastEncounter = await getState("lastEncounterTime", 0);
   const elapsed = Date.now() - lastEncounter;
+  const should = encounterEnabled && elapsed >= THIRTY_MIN;
+  console.log("[SW] shouldDoEncounterFirst: enabled=" + encounterEnabled + " elapsed=" + Math.round(elapsed / 1000) + "s should=" + should);
+  if (!encounterEnabled) return false;
   return elapsed >= THIRTY_MIN;
 }
 
@@ -126,7 +129,13 @@ async function pickAndEnterNextDifficulty(difficulties, tabId) {
     }
   }
 
+  console.log("[SW] pickAndEnterNextDifficulty: available=" + available.length + " progress=" + JSON.stringify(progress) + " nextDiff=" + JSON.stringify(nextDiff));
+  if (available.length === 0) {
+    console.log("[SW] No difficulties found, page may not be arena. Skipping.");
+    return;
+  }
   if (!nextDiff) {
+    console.log("[SW] SWEEP OFF reason: all difficulties completed");
     await addLog({ type: "victory", reason: "All arena difficulties completed!" });
     await setState("arenaSweepEnabled", false);
     chrome.notifications.create({
@@ -251,12 +260,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await handleArenaPageReady(msg, senderTabId);
         break;
 
-      case "ARENA_SWEEP_READY":
-        await handleArenaPageReady(
-          { difficulties: await getState("arenaDifficulties", []), stamina: await getState("currentStamina", 99) },
-          senderTabId,
-        );
-        break;
 
       case "BATTLE_COMPLETE":
         await handleBattleComplete(msg);
@@ -300,12 +303,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case "SET_ARENA_SWEEP": {
+        console.log("[SW] SET_ARENA_SWEEP enabled=" + msg.enabled);
         await setState("arenaSweepEnabled", msg.enabled);
         if (msg.enabled) {
+          await setState("autoArena", true);
           await setState("arenaSweepProgress", {});
           await addLog({ type: "system", reason: "Arena sweep started" });
           await resumeArenaSweep();
         } else {
+          console.log("[SW] SWEEP OFF reason: user toggled off");
           await setState("autoArena", false);
           await addLog({ type: "system", reason: "Arena sweep stopped" });
         }
@@ -334,6 +340,52 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         break;
 
+      case "RM_SOLVE": {
+        try {
+          const base64 = msg.imageBase64;
+          const byteString = atob(base64.split(",")[1]);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const blob = new Blob([ab], { type: "image/jpeg" });
+
+          const headers = { "Content-Type": "image/jpeg" };
+          if (msg.apiKey) headers["apikey"] = msg.apiKey;
+
+          const resp = await fetch("https://rdma.ooguy.com/help2", {
+            method: "POST",
+            headers,
+            body: blob,
+          });
+
+          if (resp.status === 429) {
+            sendResponse({ error: "rate limited (429)" });
+            return;
+          }
+
+          const remaining = resp.headers.get("x-ratelimit-remaining");
+          if (remaining !== null) {
+            await setState("riddleMasterRemaining", parseInt(remaining));
+          }
+
+          const data = await resp.json();
+
+          if (data.return === "finish") {
+            sendResponse({ error: "daily limit reached" });
+            return;
+          }
+          if (data.return !== "good") {
+            sendResponse({ error: "API error: " + JSON.stringify(data.return) });
+            return;
+          }
+
+          sendResponse({ data });
+        } catch (e) {
+          sendResponse({ error: e.message });
+        }
+        return;
+      }
+
       case "OPEN_DASHBOARD": {
         const url = chrome.runtime.getURL("dashboard/index.html");
         const existing = await chrome.tabs.query({ url });
@@ -354,6 +406,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "encounterCheck") {
     const enabled = await getState("encounterEnabled", false);
     if (!enabled) return;
+    const sweepRunning = await getState("arenaSweepEnabled", false);
+    if (sweepRunning) return;
     const inBattle = await getState("autoArena", false);
     if (inBattle) {
       scheduleEncounterCheck();

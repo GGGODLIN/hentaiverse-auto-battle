@@ -17,6 +17,12 @@
   "content_scripts": [
     {
       "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
+      "js": ["content/inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
       "js": ["content/battle.js", "content/arena.js"],
       "run_at": "document_idle"
     },
@@ -26,10 +32,6 @@
       "run_at": "document_idle"
     }
   ],
-  "web_accessible_resources": [{
-    "resources": ["content/inject.js"],
-    "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"]
-  }],
   "action": {
     "default_title": "HV Auto Arena"
   }
