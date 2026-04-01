@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "HV Auto Arena",
+  "version": "4.0",
+  "description": "Auto battle, arena sweep, and encounter farming for HentaiVerse",
+  "permissions": ["storage", "alarms", "tabs", "notifications"],
+  "host_permissions": [
+    "*://hentaiverse.org/*",
+    "*://www.hentaiverse.org/*",
+    "*://e-hentai.org/*",
+    "*://www.e-hentai.org/*",
+    "*://rdma.ooguy.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
+      "js": ["content/battle.js", "content/arena.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://e-hentai.org/news.php*", "*://www.e-hentai.org/news.php*"],
+      "js": ["content/encounter.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [{
+    "resources": ["content/inject.js"],
+    "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"]
+  }],
+  "action": {
+    "default_title": "HV Auto Arena"
+  }
+}

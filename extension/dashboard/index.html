@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HV Auto Arena</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>⚔ HV Auto Arena</h1>
+    <div id="resetTimer" class="reset-timer"></div>
+  </header>
+
+  <main>
+    <section class="controls">
+      <h2>Task Control</h2>
+      <div class="control-row">
+        <label>Arena Sweep</label>
+        <button id="btnArenaSweep" class="toggle-btn off">OFF</button>
+      </div>
+      <div class="control-row">
+        <label>Encounter Farming</label>
+        <button id="btnEncounter" class="toggle-btn off">OFF</button>
+      </div>
+      <div class="control-row">
+        <label>Unattended Mode</label>
+        <button id="btnUnattended" class="toggle-btn off">OFF</button>
+      </div>
+      <div class="status-row" id="currentStatus"></div>
+    </section>
+
+    <section class="arena-progress">
+      <h2>Arena Progress</h2>
+      <div id="arenaGrid" class="arena-grid"></div>
+    </section>
+
+    <section class="stats">
+      <h2>Daily Stats</h2>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <span class="stat-label">Arena Wins</span>
+          <span class="stat-value" id="statArenaWins">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Arena Losses</span>
+          <span class="stat-value" id="statArenaLosses">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Encounters</span>
+          <span class="stat-value" id="statEncounters">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Stamina</span>
+          <span class="stat-value" id="statStamina">--</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Riddle Master</span>
+          <span class="stat-value" id="statRiddle">--</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings">
+      <h2>Battle Settings</h2>
+      <div class="settings-columns">
+        <div class="settings-col">
+          <h3>Skills & Items</h3>
+          <div id="toggleGrid" class="toggle-grid"></div>
+        </div>
+        <div class="settings-col">
+          <h3>Thresholds</h3>
+          <div id="thresholdList" class="threshold-list"></div>
+          <h3>Strategy</h3>
+          <div id="strategySection"></div>
+          <h3>General</h3>
+          <div id="generalSettings"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="log-section">
+      <h2>Battle Log</h2>
+      <div id="battleLog" class="battle-log"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
