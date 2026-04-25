@@ -395,5 +395,34 @@ async function replenishOnce(replenishConfig) {
   return { success: true, results, totalCost };
 }
 
+async function replenishPreflight(world) {
+  const stored = await chrome.storage.local.get([
+    "replenishEnabled_" + world,
+    "replenishConfig",
+  ]);
+  const enabled = stored["replenishEnabled_" + world] ?? false;
+  if (!enabled) return { skip: true };
+
+  const config = stored.replenishConfig ?? {};
+  await replenishOnce(config);
+
+  const verify = await dryRun();
+  if (!verify.success) return { success: false, error: verify.error, shortfalls: [] };
+
+  const shortfalls = [];
+  for (const id of RESTORATIVE_IDS) {
+    const cfg = config[id];
+    if (!cfg) continue;
+    const current = verify.inventories[id] ?? 0;
+    if (current < cfg.low) shortfalls.push({ id, current, low: cfg.low });
+  }
+
+  if (shortfalls.length > 0) {
+    return { success: false, error: "shortfall remaining", shortfalls };
+  }
+  return { success: true };
+}
+
 globalThis.replenishDryRun = dryRun;
 globalThis.replenishOnce = replenishOnce;
+globalThis.replenishPreflight = replenishPreflight;

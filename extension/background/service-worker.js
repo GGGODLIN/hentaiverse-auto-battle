@@ -417,7 +417,7 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
-  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_RUN";
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_RUN" || msg.type === "REPLENISH_PREFLIGHT";
 
   (async () => {
     try {
@@ -590,6 +590,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case "REPLENISH_RUN": {
         const runResult = await replenishOnce(msg.replenishConfig);
         sendResponse(runResult);
+        return;
+      }
+
+      case "REPLENISH_PREFLIGHT": {
+        const preflightResult = await replenishPreflight(msg.world ?? "normal");
+        sendResponse(preflightResult);
         return;
       }
 

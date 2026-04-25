@@ -734,6 +734,25 @@
     });
   }
 
+  async function preflightReplenish() {
+    if (!storeGet(wk("autoArena"), false)) return true;
+    let resp;
+    try {
+      resp = await chrome.runtime.sendMessage({ type: "REPLENISH_PREFLIGHT", world: WORLD });
+    } catch (e) {
+      console.log("[AA] preflight: sendMessage error, proceeding: " + e.message);
+      return true;
+    }
+    if (!resp) {
+      console.log("[AA] preflight: no response from service worker, proceeding");
+      return true;
+    }
+    if (resp.skip) return true;
+    if (resp.success) return true;
+    console.log("[AA] preflight FAILED: " + JSON.stringify(resp));
+    return false;
+  }
+
   async function init() {
     await initCache();
     initBridge();
@@ -798,6 +817,11 @@
         5000,
       );
       if (found) {
+        const proceed = await preflightReplenish();
+        if (!proceed) {
+          console.log("[AA] preflight failed, auto-battle not started");
+          return;
+        }
         startBattle();
       } else if (location.search.includes("s=Battle")) {
         // On arena page, not battle — let arena.js handle it
