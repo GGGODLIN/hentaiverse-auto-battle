@@ -54,6 +54,7 @@ async function checkDailyReset() {
     });
     await setState("battleLog", []);
     await setState("riddleMasterRemaining", null);
+    await setState("rbStateToday", { day: today, fsmDone: false, trioDone: false });
     await addLog({ type: "system", reason: "Daily reset (" + today + ")" });
     console.log("[SW] Daily reset for " + today);
   }

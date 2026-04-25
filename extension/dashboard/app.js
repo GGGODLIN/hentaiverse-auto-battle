@@ -128,6 +128,21 @@ function renderControls() {
   }
 }
 
+function renderRbStatus() {
+  const el = document.getElementById("rbStatus");
+  if (!el) return;
+  const enabled = state.rbAutoEnabled ?? false;
+  if (!enabled) {
+    el.textContent = "";
+    return;
+  }
+  const s = state.rbStateToday ?? {};
+  const tokens = state.rbTokens ?? "?";
+  const fsm = s.fsmDone ? "✅" : "⬜";
+  const trio = s.trioDone ? "✅" : "⬜";
+  el.textContent = "RoB: " + fsm + " FSM " + trio + " Trio | tokens=" + tokens;
+}
+
 function renderArenaProgressForWorld(grid, worldLabel, difficulties, progress) {
   if (difficulties.length === 0) return;
 
@@ -435,6 +450,7 @@ function renderTranslations() {
 function renderAll() {
   updateResetTimer();
   renderControls();
+  renderRbStatus();
   renderArenaProgress();
   renderStats();
   renderToggles();
