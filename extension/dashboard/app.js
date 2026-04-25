@@ -371,6 +371,62 @@ function renderLog() {
   }
 }
 
+function renderTranslations() {
+  const list = document.getElementById("translationsList");
+  if (!list) return;
+  list.innerHTML = "";
+  const settings = state[TRANSLATION_SETTINGS_KEY] ?? TRANSLATION_DEFAULT_SETTINGS;
+  for (const id of TRANSLATION_HENTAIVERSE_IDS) {
+    const def = TRANSLATION_REGISTRY[id];
+    const entry = state[TRANSLATION_KEY_PREFIX + id];
+    const enabled = settings[id] !== false;
+    const row = document.createElement("div");
+    row.className = "translation-row" + (enabled ? "" : " disabled");
+
+    const left = document.createElement("div");
+    left.style.flex = "1";
+
+    const name = document.createElement("div");
+    name.className = "translation-name";
+    name.textContent = def.name;
+    left.appendChild(name);
+
+    const meta = document.createElement("div");
+    meta.className = "translation-meta";
+    if (entry?.version) {
+      const fetched = entry.lastFetched ? new Date(entry.lastFetched).toLocaleString() : "—";
+      meta.textContent = "v" + entry.version + " · " + fetched;
+    } else {
+      meta.textContent = "(not fetched)";
+    }
+    left.appendChild(meta);
+
+    if (entry?.lastError) {
+      const err = document.createElement("div");
+      err.className = "translation-error";
+      err.textContent = "⚠ " + entry.lastError.message;
+      left.appendChild(err);
+    }
+
+    row.appendChild(left);
+
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.textContent = enabled ? "🟢" : "🔴";
+    row.appendChild(dot);
+
+    row.addEventListener("click", () => {
+      const next = !enabled;
+      const newSettings = { ...settings, [id]: next };
+      state[TRANSLATION_SETTINGS_KEY] = newSettings;
+      chrome.storage.local.set({ [TRANSLATION_SETTINGS_KEY]: newSettings });
+      renderTranslations();
+    });
+
+    list.appendChild(row);
+  }
+}
+
 function renderAll() {
   updateResetTimer();
   renderControls();
@@ -381,6 +437,7 @@ function renderAll() {
   renderStrategy();
   renderGeneralSettings();
   renderLog();
+  renderTranslations();
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
@@ -412,6 +469,25 @@ document.getElementById("btnUnattended").addEventListener("click", () => {
   state.unattendedMode = next;
   chrome.storage.local.set({ unattendedMode: next });
   renderControls();
+});
+
+document.getElementById("btnTranslationUpdate")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btnTranslationUpdate");
+  const status = document.getElementById("translationUpdateStatus");
+  btn.disabled = true;
+  status.textContent = "Checking…";
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: "FETCH_TRANSLATIONS" });
+    const counts = (resp?.results ?? []).reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] ?? 0) + 1;
+      return acc;
+    }, {});
+    status.textContent = "Done · " + Object.entries(counts).map(([k, v]) => k + "=" + v).join(", ");
+  } catch (e) {
+    status.textContent = "Error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 chrome.storage.onChanged.addListener((changes) => {

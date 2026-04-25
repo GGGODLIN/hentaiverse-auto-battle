@@ -320,7 +320,7 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
-  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE";
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS";
 
   (async () => {
     try {
@@ -371,6 +371,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         case "GET_FULL_STATE": {
           const allData = await chrome.storage.local.get(null);
           sendResponse(allData);
+          return;
+        }
+
+        case "FETCH_TRANSLATIONS": {
+          const results = await fetchAllTranslations();
+          sendResponse({ results });
           return;
         }
 
@@ -515,7 +521,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   await checkDailyReset();
   await ensureTranslationDefaults();
   try {
-    await fetchTranslation("hv-main");
+    await fetchAllTranslations();
   } catch (e) {
     console.error("[SW] translation fetch failed:", e);
   }

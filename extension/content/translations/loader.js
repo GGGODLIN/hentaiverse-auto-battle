@@ -1,7 +1,7 @@
 (async () => {
   const host = location.hostname;
-  const phase1Ids = ["hv-main"];
-  const ids = host.endsWith("hentaiverse.org") ? phase1Ids : [];
+  const isHV = host.endsWith("hentaiverse.org");
+  const ids = isHV ? TRANSLATION_HENTAIVERSE_IDS : TRANSLATION_CROSS_DOMAIN_IDS;
   if (ids.length === 0) return;
 
   const keys = [TRANSLATION_SETTINGS_KEY, ...ids.map((id) => TRANSLATION_KEY_PREFIX + id)];

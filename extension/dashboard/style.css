@@ -324,3 +324,70 @@ h3:first-child {
 .log-entry.system { color: #42A5F5; }
 .log-entry.reload { color: #AB47BC; }
 .log-entry.continue { color: #78909C; }
+
+.translation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #2a2d3a;
+  cursor: pointer;
+  user-select: none;
+  gap: 12px;
+}
+
+.translation-row:last-child {
+  border-bottom: none;
+}
+
+.translation-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.translation-row.disabled {
+  opacity: 0.5;
+}
+
+.translation-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.translation-meta {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.translation-error {
+  font-size: 11px;
+  color: #EF5350;
+  margin-top: 2px;
+}
+
+.translations-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.translations-actions button {
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #1976D2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
+
+.translations-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#translationUpdateStatus {
+  font-size: 12px;
+  color: #888;
+}
