@@ -42,6 +42,20 @@
     return m ? parseInt(m[1]) : null;
   }
 
+  async function preflightReplenish() {
+    const enabled = (await chrome.storage.local.get('replenishEnabled_' + WORLD))['replenishEnabled_' + WORLD] ?? false;
+    if (!enabled) return true;
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_PREFLIGHT', world: WORLD });
+      if (!resp || resp.skip || resp.success) return true;
+      console.log('[AA] preflight FAILED: ' + JSON.stringify(resp));
+      return false;
+    } catch (e) {
+      console.log('[AA] preflight error (proceeding): ' + JSON.stringify(e?.message));
+      return true;
+    }
+  }
+
   async function enterChallenge(cost, phase) {
     const target = parseChallenges().find((c) => c.cost === cost && c.enabled);
     if (!target?.id) return false;
@@ -52,6 +66,7 @@
     document.getElementById("initid").value = target.id;
     const initToken = document.getElementById("inittoken");
     if (initToken && target.token) initToken.value = target.token;
+    if (!await preflightReplenish()) return false;
     document.getElementById("initform").submit();
     return true;
   }
