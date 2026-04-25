@@ -395,6 +395,16 @@ async function replenishOnce(replenishConfig) {
   return { success: true, results, totalCost };
 }
 
+async function markAbort(world, reason, shortfalls) {
+  await chrome.storage.local.set({
+    ['replenishAbortReason_' + world]: { ts: Date.now(), reason, shortfalls },
+    ['autoArena_' + world]: false,
+    ['arenaSweepEnabled_' + world]: false,
+    ['rbAutoEnabled_' + world]: false,
+  });
+  return { success: false, error: reason, shortfalls };
+}
+
 async function replenishPreflight(world) {
   const stored = await chrome.storage.local.get([
     "replenishEnabled_" + world,
@@ -407,19 +417,21 @@ async function replenishPreflight(world) {
   await replenishOnce(config);
 
   const verify = await dryRun();
-  if (!verify.success) return { success: false, error: verify.error, shortfalls: [] };
+  if (!verify.success) return markAbort(world, verify.error, []);
 
   const shortfalls = [];
   for (const id of RESTORATIVE_IDS) {
     const cfg = config[id];
     if (!cfg) continue;
     const current = verify.inventories[id] ?? 0;
-    if (current < cfg.low) shortfalls.push({ id, current, low: cfg.low });
+    if (current < cfg.low) shortfalls.push({ id, current, low: cfg.low, deficit: cfg.low - current });
   }
 
   if (shortfalls.length > 0) {
-    return { success: false, error: "shortfall remaining", shortfalls };
+    return markAbort(world, 'shortfall remaining', shortfalls);
   }
+
+  await chrome.storage.local.remove('replenishAbortReason_' + world);
   return { success: true };
 }
 

@@ -488,6 +488,46 @@ function renderTranslations() {
   }
 }
 
+function itemName(id) {
+  return (REPLENISH_ITEMS.find((i) => i.id === id) ?? {}).name ?? id;
+}
+
+function renderReplenishAbortAlerts() {
+  const container = document.getElementById('replenishAbortAlerts');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const world of ['normal', 'isekai']) {
+    const reason = state['replenishAbortReason_' + world];
+    if (!reason) continue;
+
+    const alert = document.createElement('div');
+    alert.className = 'replenish-abort-alert';
+
+    const text = document.createElement('span');
+    const worldLabel = world === 'normal' ? 'N' : 'I';
+    const time = new Date(reason.ts).toLocaleTimeString();
+    let detail = reason.reason;
+    if (reason.shortfalls?.length > 0) {
+      detail = reason.shortfalls.map((s) => itemName(s.id) + ' 缺 ' + s.deficit).join(', ');
+    }
+    text.textContent = '⚠️ [' + worldLabel + '] ' + detail + ' (' + time + ') autoArena 已自動關閉';
+    alert.appendChild(text);
+
+    const close = document.createElement('button');
+    close.textContent = '✕';
+    close.className = 'replenish-abort-close';
+    close.addEventListener('click', async () => {
+      await chrome.storage.local.remove('replenishAbortReason_' + world);
+      delete state['replenishAbortReason_' + world];
+      renderReplenishAbortAlerts();
+    });
+    alert.appendChild(close);
+
+    container.appendChild(alert);
+  }
+}
+
 function getReplenishConfig() {
   const stored = state.replenishConfig ?? {};
   return Object.fromEntries(
@@ -671,6 +711,7 @@ function renderAll() {
   renderLog();
   renderTranslations();
   renderReplenishConfig();
+  renderReplenishAbortAlerts();
   renderReplenishLog();
 }
 
@@ -679,6 +720,11 @@ document.getElementById("btnArenaSweep").addEventListener("click", async () => {
   const next = !current;
   state.arenaSweepEnabled_normal = next;
   chrome.runtime.sendMessage({ type: "SET_ARENA_SWEEP", enabled: next, world: "normal" });
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_normal');
+    delete state['replenishAbortReason_normal'];
+    renderReplenishAbortAlerts();
+  }
   renderControls();
 });
 
@@ -687,6 +733,11 @@ document.getElementById("btnArenaIsekai").addEventListener("click", async () => 
   const next = !current;
   state.arenaSweepEnabled_isekai = next;
   chrome.runtime.sendMessage({ type: "SET_ARENA_SWEEP", enabled: next, world: "isekai" });
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_isekai');
+    delete state['replenishAbortReason_isekai'];
+    renderReplenishAbortAlerts();
+  }
   renderControls();
 });
 
@@ -705,32 +756,54 @@ document.getElementById("btnUnattended").addEventListener("click", () => {
   renderControls();
 });
 
-document.getElementById("btnRingOfBlood").addEventListener("click", () => {
+document.getElementById("btnRingOfBlood").addEventListener("click", async () => {
   const next = !(state.rbAutoEnabled_normal ?? false);
   state.rbAutoEnabled_normal = next;
   chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next, world: "normal" });
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_normal');
+    delete state['replenishAbortReason_normal'];
+    renderReplenishAbortAlerts();
+  }
   renderControls();
 });
 
-document.getElementById("btnRingOfBloodIsekai").addEventListener("click", () => {
+document.getElementById("btnRingOfBloodIsekai").addEventListener("click", async () => {
   const next = !(state.rbAutoEnabled_isekai ?? false);
   state.rbAutoEnabled_isekai = next;
   chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next, world: "isekai" });
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_isekai');
+    delete state['replenishAbortReason_isekai'];
+    renderReplenishAbortAlerts();
+  }
   renderControls();
 });
 
 document.getElementById("btnReplenishModeNormal").addEventListener("click", async () => {
   const cur = state.replenishEnabled_normal ?? false;
-  await chrome.storage.local.set({ replenishEnabled_normal: !cur });
-  state.replenishEnabled_normal = !cur;
+  const next = !cur;
+  await chrome.storage.local.set({ replenishEnabled_normal: next });
+  state.replenishEnabled_normal = next;
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_normal');
+    delete state['replenishAbortReason_normal'];
+  }
   renderControls();
+  renderReplenishAbortAlerts();
 });
 
 document.getElementById("btnReplenishModeIsekai").addEventListener("click", async () => {
   const cur = state.replenishEnabled_isekai ?? false;
-  await chrome.storage.local.set({ replenishEnabled_isekai: !cur });
-  state.replenishEnabled_isekai = !cur;
+  const next = !cur;
+  await chrome.storage.local.set({ replenishEnabled_isekai: next });
+  state.replenishEnabled_isekai = next;
+  if (next) {
+    await chrome.storage.local.remove('replenishAbortReason_isekai');
+    delete state['replenishAbortReason_isekai'];
+  }
   renderControls();
+  renderReplenishAbortAlerts();
 });
 
 document.getElementById("btnTranslationUpdate")?.addEventListener("click", async () => {

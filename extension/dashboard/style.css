@@ -496,3 +496,33 @@ h3:first-child {
   font-family: "SF Mono", "Consolas", monospace;
   line-height: 1.6;
 }
+
+.replenish-abort-alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: rgba(198, 40, 40, 0.15);
+  border: 1px solid #c62828;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #EF9A9A;
+}
+
+.replenish-abort-close {
+  flex-shrink: 0;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid #c62828;
+  border-radius: 4px;
+  color: #EF9A9A;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.replenish-abort-close:hover {
+  background: rgba(198, 40, 40, 0.3);
+}
