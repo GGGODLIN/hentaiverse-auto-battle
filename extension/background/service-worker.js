@@ -104,6 +104,7 @@ async function handleArenaPageReady(msg, senderTabId) {
       message: "Stamina depleted (" + stamina + "), arena sweep paused.",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>⚔</text></svg>",
     });
+    if (world === "normal") await maybeTriggerRb();
     return;
   }
 
@@ -140,6 +141,41 @@ async function handleRbPageReady(msg, senderTabId) {
       await addLog({ type: "alert", reason: "RoB: insufficient tokens for FSM (" + msg.tokens + "/5), skipping" });
     }
     return;
+  }
+
+  if (!state.trioDone) {
+    const trioMin = await getState("rbTrioMinAfterFSM", RB_DEFAULT_TRIO_MIN);
+    if (msg.tokens != null && msg.tokens > trioMin) {
+      await addLog({ type: "system", reason: "RoB: entering Trio (tokens=" + msg.tokens + ")" });
+      await sendToTab(senderTabId, { type: "ENTER_RB", cost: 10, phase: "trio" });
+    } else {
+      state.trioDone = true;
+      await setState("rbStateToday", state);
+      await addLog({ type: "system", reason: "RoB: skipping Trio (tokens=" + msg.tokens + ", threshold>" + trioMin + ")" });
+    }
+    return;
+  }
+
+  await addLog({ type: "system", reason: "RoB: all done today" });
+}
+
+async function maybeTriggerRb() {
+  const enabled = await getState("rbAutoEnabled", false);
+  if (!enabled) return;
+  const state = await getRbStateToday();
+  if (state.fsmDone && state.trioDone) return;
+
+  const RB_URL = "https://hentaiverse.org/?s=Battle&ss=rb";
+  const tabId = await getState("rbTabId", null);
+  let tab = null;
+  if (tabId) {
+    try { tab = await chrome.tabs.get(tabId); } catch {}
+  }
+  if (tab) {
+    await chrome.tabs.update(tab.id, { url: RB_URL });
+  } else {
+    tab = await chrome.tabs.create({ url: RB_URL, active: false });
+    await setState("rbTabId", tab.id);
   }
 }
 
@@ -221,6 +257,7 @@ async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
       message: "All arena difficulties completed!",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
     });
+    if (world === "normal") await maybeTriggerRb();
     return;
   }
 
@@ -271,6 +308,12 @@ async function handleBattleComplete(msg) {
       type: result === "victory" ? "victory" : "defeated",
       reason: "RoB " + ctx.phase + " " + result,
     });
+    if (!rbState.trioDone) {
+      const rbTabId = await getState("rbTabId", null);
+      if (rbTabId) {
+        try { await chrome.tabs.update(rbTabId, { url: "https://hentaiverse.org/?s=Battle&ss=rb" }); } catch {}
+      }
+    }
     return;
   }
 
@@ -311,6 +354,7 @@ async function handleBattleComplete(msg) {
         message: "All arena difficulties completed!",
         iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
       });
+      if (world === "normal") await maybeTriggerRb();
       return;
     }
 
@@ -465,6 +509,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           await setState("rbAutoEnabled", msg.enabled);
           if (msg.enabled) {
             await addLog({ type: "system", reason: "RoB auto started" });
+            const sweepNormal = await getState(wk("arenaSweepEnabled", "normal"), false);
+            const sweepIsekai = await getState(wk("arenaSweepEnabled", "isekai"), false);
+            if (!sweepNormal && !sweepIsekai) {
+              await maybeTriggerRb();
+            }
           } else {
             await addLog({ type: "system", reason: "RoB auto stopped" });
           }
