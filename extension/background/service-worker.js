@@ -503,9 +503,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "dailyReset") {
     await checkDailyReset();
   }
+  if (alarm.name === TRANSLATION_UPDATE_ALARM) {
+    await fetchAllTranslations();
+  }
 });
 
 chrome.alarms.create("dailyReset", { periodInMinutes: 5 });
+chrome.alarms.create(TRANSLATION_UPDATE_ALARM, { periodInMinutes: TRANSLATION_UPDATE_INTERVAL_MIN });
 
 chrome.action.onClicked.addListener(async () => {
   const url = chrome.runtime.getURL("dashboard/index.html");

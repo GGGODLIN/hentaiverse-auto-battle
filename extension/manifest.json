@@ -39,6 +39,11 @@
       "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
       "js": ["shared/translation-constants.js", "content/translations/loader.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://forums.e-hentai.org/*showtopic=*", "*://hvmarket.xyz/*", "*://reasoningtheory.net/*"],
+      "js": ["shared/translation-constants.js", "content/translations/loader.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {
@@ -47,7 +52,13 @@
   "web_accessible_resources": [
     {
       "resources": ["content/translations/gm-polyfill.js"],
-      "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"]
+      "matches": [
+        "*://hentaiverse.org/*",
+        "*://www.hentaiverse.org/*",
+        "*://forums.e-hentai.org/*",
+        "*://hvmarket.xyz/*",
+        "*://reasoningtheory.net/*"
+      ]
     }
   ]
 }
