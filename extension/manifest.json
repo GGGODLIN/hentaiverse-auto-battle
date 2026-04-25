@@ -27,7 +27,7 @@
     },
     {
       "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
-      "js": ["content/battle.js", "content/arena.js"],
+      "js": ["content/battle.js", "content/arena.js", "content/ring-of-blood.js"],
       "run_at": "document_idle"
     },
     {

@@ -120,6 +120,29 @@ async function handleArenaPageReady(msg, senderTabId) {
   await pickAndEnterNextDifficulty(msg.difficulties, senderTabId, world);
 }
 
+async function handleRbPageReady(msg, senderTabId) {
+  const enabled = await getState("rbAutoEnabled", false);
+  if (!enabled) return;
+
+  await setState("rbTokens", msg.tokens);
+  await setState("rbTabId", senderTabId);
+
+  const state = await getRbStateToday();
+
+  if (!state.fsmDone) {
+    if (msg.tokens != null && msg.tokens >= 5) {
+      await addLog({ type: "system", reason: "RoB: entering FSM (tokens=" + msg.tokens + ")" });
+      await sendToTab(senderTabId, { type: "ENTER_RB", cost: 5, phase: "fsm" });
+    } else {
+      state.fsmDone = true;
+      state.trioDone = true;
+      await setState("rbStateToday", state);
+      await addLog({ type: "alert", reason: "RoB: insufficient tokens for FSM (" + msg.tokens + "/5), skipping" });
+    }
+    return;
+  }
+}
+
 async function shouldDoEncounterFirst() {
   const encounterEnabled = await getState("encounterEnabled", false);
   const lastEncounter = await getState("lastEncounterTime", 0);
@@ -238,6 +261,19 @@ async function handleBattleComplete(msg) {
     return;
   }
 
+  if (battleType === "rb") {
+    const ctx = await getState(wk("battleContext", world), {});
+    const rbState = await getRbStateToday();
+    if (ctx.phase === "fsm") rbState.fsmDone = true;
+    if (ctx.phase === "trio") rbState.trioDone = true;
+    await setState("rbStateToday", rbState);
+    await addLog({
+      type: result === "victory" ? "victory" : "defeated",
+      reason: "RoB " + ctx.phase + " " + result,
+    });
+    return;
+  }
+
   if (battleType === "arena") {
     const progress = await getState(wk("arenaSweepProgress", world), {});
 
@@ -343,6 +379,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           await handleArenaPageReady(msg, senderTabId);
           break;
 
+        case "RB_PAGE_READY":
+          await handleRbPageReady(msg, senderTabId);
+          break;
+
         case "BATTLE_COMPLETE":
           await handleBattleComplete(msg);
           break;
@@ -417,6 +457,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           } else {
             chrome.alarms.clear("encounterCheck");
             await addLog({ type: "system", reason: "Encounter farming stopped" });
+          }
+          break;
+        }
+
+        case "SET_RB_AUTO": {
+          await setState("rbAutoEnabled", msg.enabled);
+          if (msg.enabled) {
+            await addLog({ type: "system", reason: "RoB auto started" });
+          } else {
+            await addLog({ type: "system", reason: "RoB auto stopped" });
           }
           break;
         }

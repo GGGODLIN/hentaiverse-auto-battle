@@ -114,6 +114,11 @@ function renderControls() {
   btnUna.textContent = unaOn ? "ON" : "OFF";
   btnUna.className = "toggle-btn " + (unaOn ? "on" : "off");
 
+  const btnRb = document.getElementById("btnRingOfBlood");
+  const rbOn = state.rbAutoEnabled ?? false;
+  btnRb.textContent = rbOn ? "ON" : "OFF";
+  btnRb.className = "toggle-btn " + (rbOn ? "on" : "off");
+
   const statusEl = document.getElementById("currentStatus");
   const lastStatus = state.lastBattleStatus;
   if (lastStatus) {
@@ -468,6 +473,13 @@ document.getElementById("btnUnattended").addEventListener("click", () => {
   const next = !(state.unattendedMode ?? false);
   state.unattendedMode = next;
   chrome.storage.local.set({ unattendedMode: next });
+  renderControls();
+});
+
+document.getElementById("btnRingOfBlood").addEventListener("click", () => {
+  const next = !(state.rbAutoEnabled ?? false);
+  state.rbAutoEnabled = next;
+  chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next });
   renderControls();
 });
 
