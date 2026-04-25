@@ -9,25 +9,25 @@
 - [x] T0.3 Manifest 加 host_permissions + bump 4.0 → 4.1
 
 ## Phase 1 — First slice (1 個漢化跑通)
-- [ ] T1.1 Background updater + `fetchTranslation('hv-main')`
-- [ ] T1.2 `onInstalled` trigger 首次 fetch
-- [ ] T1.3 `content/translations/loader.js`（讀 storage → MAIN world inject）
-- [ ] T1.4 manifest content_scripts 加 loader entry
+- [x] T1.1 Background updater + `fetchTranslation('hv-main')`
+- [x] T1.2 `onInstalled` trigger 首次 fetch
+- [x] T1.3 `content/translations/loader.js`（讀 storage → MAIN world inject）
+- [x] T1.4 manifest content_scripts 加 loader entry
 
 🚦 **Checkpoint 1**: hentaiverse.org 看到中文 + autoArena 自動戰鬥不爛 → 過了才繼續
 
 ## Phase 2 — 擴展到 4 個 + dashboard UI
-- [ ] T2.1 Updater registry → 4 scripts
-- [ ] T2.2 Dashboard Translations panel (HTML + CSS + render)
-- [ ] T2.3 Toggle on/off handler
-- [ ] T2.4 立即檢查更新按鈕 + 版本/錯誤顯示
+- [x] T2.1 Updater registry → 4 scripts
+- [x] T2.2 Dashboard Translations panel (HTML + CSS + render)
+- [x] T2.3 Toggle on/off handler
+- [x] T2.4 立即檢查更新按鈕 + 版本/錯誤顯示
 
 🚦 **Checkpoint 2**: 4 個 toggle 可用 + 手動更新有效 → 過了才繼續
 
 ## Phase 3 — 自動更新 + fallback + cross-domain
-- [ ] T3.1 `chrome.alarms` 24h periodic
-- [ ] T3.2 Fetch 失敗保留快取（驗證 T1.1 邏輯）
-- [ ] T3.3 Cross-domain content script (items 漢化在 forums / hvmarket / reasoningtheory)
+- [x] T3.1 `chrome.alarms` 24h periodic
+- [x] T3.2 Fetch 失敗保留快取（驗證 T1.1 邏輯）
+- [x] T3.3 Cross-domain content script (items 漢化在 forums / hvmarket / reasoningtheory)
 
 🚦 **Checkpoint 3**: AC1-AC10 全綠 → 過了才繼續
 
