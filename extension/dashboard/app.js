@@ -57,6 +57,30 @@ const THRESHOLDS = [
 
 const RESET_HOUR = 8;
 
+const REPLENISH_ITEMS = [
+  { id: '11191', name: '体力长效药' },
+  { id: '11195', name: '体力药水' },
+  { id: '11199', name: '终极体力药' },
+  { id: '11291', name: '法力长效药' },
+  { id: '11295', name: '法力药水' },
+  { id: '11299', name: '终极法力药' },
+  { id: '11391', name: '灵力长效药' },
+  { id: '11395', name: '灵力药水' },
+  { id: '11399', name: '终极灵力药' },
+];
+
+const DEFAULT_REPLENISH_CONFIG = {
+  '11191': { low: 500, target: 600 },
+  '11195': { low: 500, target: 600 },
+  '11199': { low: 100, target: 200 },
+  '11291': { low: 500, target: 600 },
+  '11295': { low: 500, target: 600 },
+  '11299': { low: 100, target: 200 },
+  '11391': { low: 500, target: 600 },
+  '11395': { low: 500, target: 600 },
+  '11399': { low: 100, target: 200 },
+};
+
 let state = {};
 
 async function loadState() {
@@ -454,6 +478,63 @@ function renderTranslations() {
   }
 }
 
+function getReplenishConfig() {
+  return { ...DEFAULT_REPLENISH_CONFIG, ...(state.replenishConfig ?? {}) };
+}
+
+function setReplenishConfig(itemId, field, value) {
+  const config = getReplenishConfig();
+  const updated = { ...config, [itemId]: { ...config[itemId], [field]: value } };
+  state.replenishConfig = updated;
+  chrome.storage.local.set({ replenishConfig: updated });
+}
+
+function renderReplenishPanel() {
+  const list = document.getElementById('replenishList');
+  if (!list) return;
+  list.innerHTML = '';
+  const config = getReplenishConfig();
+
+  for (const item of REPLENISH_ITEMS) {
+    const entry = config[item.id] ?? DEFAULT_REPLENISH_CONFIG[item.id];
+    const row = document.createElement('div');
+    row.className = 'replenish-row';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'replenish-name';
+    nameSpan.textContent = item.name;
+    row.appendChild(nameSpan);
+
+    const lowInput = document.createElement('input');
+    lowInput.type = 'number';
+    lowInput.min = '0';
+    lowInput.value = entry.low;
+    lowInput.title = '低於此數量時補貨';
+    lowInput.addEventListener('change', () => {
+      const raw = parseInt(lowInput.value);
+      const val = Math.max(0, Number.isNaN(raw) ? 0 : raw);
+      lowInput.value = val;
+      setReplenishConfig(item.id, 'low', val);
+    });
+    row.appendChild(lowInput);
+
+    const targetInput = document.createElement('input');
+    targetInput.type = 'number';
+    targetInput.min = '0';
+    targetInput.value = entry.target;
+    targetInput.title = '補貨至此數量';
+    targetInput.addEventListener('change', () => {
+      const raw = parseInt(targetInput.value);
+      const val = Math.max(0, Number.isNaN(raw) ? 0 : raw);
+      targetInput.value = val;
+      setReplenishConfig(item.id, 'target', val);
+    });
+    row.appendChild(targetInput);
+
+    list.appendChild(row);
+  }
+}
+
 function renderAll() {
   updateResetTimer();
   renderControls();
@@ -466,6 +547,7 @@ function renderAll() {
   renderGeneralSettings();
   renderLog();
   renderTranslations();
+  renderReplenishPanel();
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
@@ -532,6 +614,8 @@ document.getElementById("btnTranslationUpdate")?.addEventListener("click", async
   }
 });
 
+document.getElementById('btnReplenish').addEventListener('click', () => {});
+
 chrome.storage.onChanged.addListener((changes) => {
   for (const [key, { newValue }] of Object.entries(changes)) {
     state[key] = newValue;
@@ -543,5 +627,12 @@ setInterval(updateResetTimer, 60000);
 
 (async () => {
   await loadState();
+  if (state.replenishConfig == null) {
+    const seed = Object.fromEntries(
+      Object.entries(DEFAULT_REPLENISH_CONFIG).map(([k, v]) => [k, { ...v }])
+    );
+    state.replenishConfig = seed;
+    chrome.storage.local.set({ replenishConfig: seed });
+  }
   renderAll();
 })();

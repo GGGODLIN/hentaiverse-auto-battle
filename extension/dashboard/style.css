@@ -391,3 +391,54 @@ h3:first-child {
   font-size: 12px;
   color: #888;
 }
+
+.replenish-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #2a2d3a;
+  gap: 12px;
+}
+
+.replenish-row:last-child {
+  border-bottom: none;
+}
+
+.replenish-name {
+  flex: 1;
+}
+
+.replenish-row input {
+  width: 72px;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.replenish-row input:focus {
+  outline: none;
+  border-color: #1976D2;
+}
+
+.replenish-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.replenish-actions button {
+  padding: 6px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #1976D2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
