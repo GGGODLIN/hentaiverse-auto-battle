@@ -9,6 +9,8 @@ function wk(key, world) { return key + "_" + world; }
 function arenaUrl(world) { return world === "isekai" ? ARENA_URL_ISEKAI : ARENA_URL_NORMAL; }
 const NEWS_URL = "https://e-hentai.org/news.php";
 const RESET_HOUR = 8;
+const RB_DEFAULT_RESERVE = 5;
+const RB_DEFAULT_TRIO_MIN = 15;
 
 function getGameDay() {
   const now = new Date();
@@ -55,6 +57,16 @@ async function checkDailyReset() {
     await addLog({ type: "system", reason: "Daily reset (" + today + ")" });
     console.log("[SW] Daily reset for " + today);
   }
+}
+
+async function getRbStateToday() {
+  const today = getGameDay();
+  let s = await getState("rbStateToday", null);
+  if (!s || s.day !== today) {
+    s = { day: today, fsmDone: false, trioDone: false };
+    await setState("rbStateToday", s);
+  }
+  return s;
 }
 
 async function findOrCreateTab(url) {
