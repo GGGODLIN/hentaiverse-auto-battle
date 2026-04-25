@@ -479,7 +479,13 @@ function renderTranslations() {
 }
 
 function getReplenishConfig() {
-  return { ...DEFAULT_REPLENISH_CONFIG, ...(state.replenishConfig ?? {}) };
+  const stored = state.replenishConfig ?? {};
+  return Object.fromEntries(
+    REPLENISH_ITEMS.map(({ id }) => [
+      id,
+      { ...DEFAULT_REPLENISH_CONFIG[id], ...(stored[id] ?? {}) }
+    ])
+  );
 }
 
 function setReplenishConfig(itemId, field, value) {
@@ -489,7 +495,7 @@ function setReplenishConfig(itemId, field, value) {
   chrome.storage.local.set({ replenishConfig: updated });
 }
 
-function renderReplenishPanel() {
+function renderReplenishConfig() {
   const list = document.getElementById('replenishList');
   if (!list) return;
   list.innerHTML = '';
@@ -499,6 +505,7 @@ function renderReplenishPanel() {
     const entry = config[item.id] ?? DEFAULT_REPLENISH_CONFIG[item.id];
     const row = document.createElement('div');
     row.className = 'replenish-row';
+    row.dataset.itemId = item.id;
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'replenish-name';
@@ -531,7 +538,32 @@ function renderReplenishPanel() {
     });
     row.appendChild(targetInput);
 
+    const invSpan = document.createElement('span');
+    invSpan.className = 'replenish-inv';
+    row.appendChild(invSpan);
+
     list.appendChild(row);
+  }
+
+  renderReplenishStatus(state.replenishLastInventory?.inventories ?? {});
+}
+
+function renderReplenishStatus(inventories) {
+  const config = getReplenishConfig();
+  for (const item of REPLENISH_ITEMS) {
+    const row = document.querySelector('#replenishList [data-item-id="' + item.id + '"]');
+    if (!row) continue;
+    const invSpan = row.querySelector('.replenish-inv');
+    if (!invSpan) continue;
+    const count = inventories[item.id];
+    if (count == null) {
+      invSpan.textContent = '';
+      invSpan.style.color = '';
+      continue;
+    }
+    const low = (config[item.id] ?? DEFAULT_REPLENISH_CONFIG[item.id]).low;
+    invSpan.textContent = count;
+    invSpan.style.color = count < low ? '#EF5350' : '#66BB6A';
   }
 }
 
@@ -547,7 +579,7 @@ function renderAll() {
   renderGeneralSettings();
   renderLog();
   renderTranslations();
-  renderReplenishPanel();
+  renderReplenishConfig();
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
@@ -614,7 +646,36 @@ document.getElementById("btnTranslationUpdate")?.addEventListener("click", async
   }
 });
 
-document.getElementById('btnReplenish').addEventListener('click', () => {});
+document.getElementById('btnReplenish').addEventListener('click', async () => {
+  const btn = document.getElementById('btnReplenish');
+  let statusEl = document.getElementById('replenishStatus');
+  if (!statusEl) {
+    statusEl = document.createElement('span');
+    statusEl.id = 'replenishStatus';
+    statusEl.style.cssText = 'margin-left:8px;font-size:12px;color:#aaa;';
+    btn.parentNode.appendChild(statusEl);
+  }
+  btn.disabled = true;
+  statusEl.textContent = '查詢中…';
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_DRY_RUN' });
+    if (resp?.success) {
+      const lastInventory = { ts: Date.now(), inventories: resp.inventories };
+      state.replenishLastInventory = lastInventory;
+      chrome.storage.local.set({ replenishLastInventory: lastInventory });
+      renderReplenishStatus(resp.inventories);
+      statusEl.textContent = '';
+    } else {
+      statusEl.style.color = '#EF5350';
+      statusEl.textContent = '錯誤: ' + (resp?.error ?? '未知錯誤');
+    }
+  } catch (e) {
+    statusEl.style.color = '#EF5350';
+    statusEl.textContent = '錯誤: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 chrome.storage.onChanged.addListener((changes) => {
   for (const [key, { newValue }] of Object.entries(changes)) {

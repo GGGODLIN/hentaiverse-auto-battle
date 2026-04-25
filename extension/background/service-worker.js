@@ -1,4 +1,4 @@
-importScripts("/shared/translation-constants.js", "/background/translation-updater.js");
+importScripts("/shared/translation-constants.js", "/background/translation-updater.js", "/background/replenish.js");
 
 const THIRTY_MIN = 30 * 60 * 1000;
 const ONE_MIN = 60 * 1000;
@@ -417,7 +417,7 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
-  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS";
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN";
 
   (async () => {
     try {
@@ -578,6 +578,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         } catch (e) {
           sendResponse({ error: e.message });
         }
+        return;
+      }
+
+      case "REPLENISH_DRY_RUN": {
+        const result = await replenishDryRun();
+        sendResponse(result);
         return;
       }
 
