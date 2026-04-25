@@ -148,6 +148,16 @@ function renderControls() {
   btnRbIsekai.textContent = rbIsekaiOn ? "ON" : "OFF";
   btnRbIsekai.className = "toggle-btn " + (rbIsekaiOn ? "on" : "off");
 
+  const btnReplenishNormal = document.getElementById("btnReplenishModeNormal");
+  const replenishNormalOn = state.replenishEnabled_normal ?? false;
+  btnReplenishNormal.textContent = replenishNormalOn ? "ON" : "OFF";
+  btnReplenishNormal.className = "toggle-btn " + (replenishNormalOn ? "on" : "off");
+
+  const btnReplenishIsekai = document.getElementById("btnReplenishModeIsekai");
+  const replenishIsekaiOn = state.replenishEnabled_isekai ?? false;
+  btnReplenishIsekai.textContent = replenishIsekaiOn ? "ON" : "OFF";
+  btnReplenishIsekai.className = "toggle-btn " + (replenishIsekaiOn ? "on" : "off");
+
   const statusEl = document.getElementById("currentStatus");
   const lastStatus = state.lastBattleStatus;
   if (lastStatus) {
@@ -706,6 +716,20 @@ document.getElementById("btnRingOfBloodIsekai").addEventListener("click", () => 
   const next = !(state.rbAutoEnabled_isekai ?? false);
   state.rbAutoEnabled_isekai = next;
   chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next, world: "isekai" });
+  renderControls();
+});
+
+document.getElementById("btnReplenishModeNormal").addEventListener("click", async () => {
+  const cur = state.replenishEnabled_normal ?? false;
+  await chrome.storage.local.set({ replenishEnabled_normal: !cur });
+  state.replenishEnabled_normal = !cur;
+  renderControls();
+});
+
+document.getElementById("btnReplenishModeIsekai").addEventListener("click", async () => {
+  const cur = state.replenishEnabled_isekai ?? false;
+  await chrome.storage.local.set({ replenishEnabled_isekai: !cur });
+  state.replenishEnabled_isekai = !cur;
   renderControls();
 });
 
