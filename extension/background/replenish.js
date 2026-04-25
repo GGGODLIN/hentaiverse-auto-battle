@@ -204,6 +204,61 @@ async function deposit(amount, marketoken, depositSubmitValue) {
   }
 }
 
+const REPLENISH_SHOP_URL = "https://hentaiverse.org/?s=Bazaar&ss=is";
+
+async function fetchStoretoken() {
+  try {
+    const res = await fetch(REPLENISH_SHOP_URL, { credentials: "include" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+
+    if (res.url.includes('s=Login') || /name="UserName"/i.test(text)) {
+      return { success: false, error: 'session expired (redirected to login)' };
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "text/html");
+
+    const tokenInput = doc.querySelector('input[name="storetoken"]');
+    if (!tokenInput) return { success: false, error: 'parse: storetoken input not found' };
+
+    console.log("[replenish] fetchStoretoken ok");
+    return { success: true, value: tokenInput.value };
+  } catch (err) {
+    console.log("[replenish] fetchStoretoken error: " + JSON.stringify(err.message));
+    return { success: false, error: err.message };
+  }
+}
+
+async function shopBuy(itemId, count, storetoken) {
+  try {
+    const body = new URLSearchParams({
+      storetoken,
+      select_mode: "shop_pane",
+      select_item: itemId,
+      select_count: String(count),
+    });
+    const res = await fetch(REPLENISH_SHOP_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+
+    if (res.url.includes('s=Login') || /name="UserName"/i.test(text)) {
+      return { success: false, error: 'session expired (redirected to login)' };
+    }
+
+    console.log("[replenish] shopBuy itemId=" + JSON.stringify(itemId) + " count=" + JSON.stringify(count));
+    return { success: true };
+  } catch (err) {
+    console.log("[replenish] shopBuy error: " + JSON.stringify(err.message));
+    return { success: false, error: err.message };
+  }
+}
+
 async function replenishOnce(replenishConfig) {
   const dryResult = await dryRun();
   if (!dryResult.success) return dryResult;
@@ -221,47 +276,82 @@ async function replenishOnce(replenishConfig) {
       continue;
     }
 
-    let detail = await fetchMarketDetail(itemId);
-    if (!detail.success) {
-      results.push({ id: itemId, status: 'failed', reason: detail.error });
-      continue;
-    }
-
     const packSize = packSizeFor(itemId);
     const shortfall = cfg.target - inv;
-    const packsNeeded = Math.ceil(shortfall / packSize);
-    const cost = packsNeeded * detail.lowestAsk;
+    let marketUnits = 0;
+    let marketCost = 0;
+    let marketError = null;
 
-    if (detail.marketBalance < cost || detail.marketBalance < REPLENISH_DEPOSIT_FLOOR) {
-      const depositAmount = REPLENISH_DEPOSIT_FLOOR - detail.marketBalance;
-      if (depositAmount > 0) {
-        if (depositAmount > detail.accountBalance) {
-          results.push({ id: itemId, status: 'failed', reason: 'insufficient account balance to deposit (need ' + depositAmount + ', have ' + detail.accountBalance + ')' });
-          continue;
+    const detail = await fetchMarketDetail(itemId);
+    if (!detail.success) {
+      marketError = detail.error;
+    } else {
+      const packsNeeded = Math.ceil(shortfall / packSize);
+      const cost = packsNeeded * detail.lowestAsk;
+      let currentDetail = detail;
+
+      if (currentDetail.marketBalance < cost || currentDetail.marketBalance < REPLENISH_DEPOSIT_FLOOR) {
+        const depositAmount = REPLENISH_DEPOSIT_FLOOR - currentDetail.marketBalance;
+        if (depositAmount > 0) {
+          if (depositAmount > currentDetail.accountBalance) {
+            marketError = 'insufficient account balance to deposit (need ' + depositAmount + ', have ' + currentDetail.accountBalance + ')';
+          } else {
+            const depositRes = await deposit(depositAmount, currentDetail.marketoken, currentDetail.accountDepositSubmitValue);
+            if (!depositRes.success) {
+              marketError = 'deposit failed: ' + depositRes.error;
+            } else {
+              console.log("[replenish] deposited " + JSON.stringify(depositAmount) + " for item " + JSON.stringify(itemId));
+              const refresh = await fetchMarketDetail(itemId);
+              if (!refresh.success) {
+                marketError = 'refresh-after-deposit: ' + refresh.error;
+              } else {
+                currentDetail = refresh;
+              }
+            }
+          }
         }
-        const depositRes = await deposit(depositAmount, detail.marketoken, detail.accountDepositSubmitValue);
-        if (!depositRes.success) {
-          results.push({ id: itemId, status: 'failed', reason: 'deposit failed: ' + depositRes.error });
-          continue;
+      }
+
+      if (!marketError) {
+        const orderRes = await placeBuyOrder(itemId, packsNeeded, currentDetail.lowestAsk, currentDetail.marketoken, currentDetail.submitValue);
+        if (!orderRes.success) {
+          marketError = orderRes.error;
+        } else {
+          marketUnits = packsNeeded * packSize;
+          marketCost = cost;
+          totalCost += cost;
         }
-        console.log("[replenish] deposited " + JSON.stringify(depositAmount) + " for item " + JSON.stringify(itemId));
-        const refresh = await fetchMarketDetail(itemId);
-        if (!refresh.success) {
-          results.push({ id: itemId, status: 'failed', reason: 'refresh-after-deposit: ' + refresh.error });
-          continue;
-        }
-        detail = refresh;
       }
     }
 
-    const orderRes = await placeBuyOrder(itemId, packsNeeded, detail.lowestAsk, detail.marketoken, detail.submitValue);
-    if (!orderRes.success) {
-      results.push({ id: itemId, status: 'failed', reason: orderRes.error });
+    const remaining = shortfall - marketUnits;
+
+    if (remaining <= 0) {
+      results.push({ id: itemId, status: 'bought', source: 'market', units: marketUnits, cost: marketCost });
       continue;
     }
 
-    results.push({ id: itemId, status: 'bought', packs: packsNeeded, unitsBought: packsNeeded * packSize, pricePerPack: detail.lowestAsk, cost });
-    totalCost += cost;
+    const storetokenRes = await fetchStoretoken();
+    if (!storetokenRes.success) {
+      results.push({ id: itemId, status: 'failed', reason: 'shop fallback: ' + storetokenRes.error, marketError });
+      continue;
+    }
+
+    const shopRes = await shopBuy(itemId, remaining, storetokenRes.value);
+    if (!shopRes.success) {
+      if (marketUnits > 0) {
+        results.push({ id: itemId, status: 'partial', source: 'mixed', marketUnits, shopError: shopRes.error });
+      } else {
+        results.push({ id: itemId, status: 'failed', reason: 'shop failed: ' + shopRes.error, marketError });
+      }
+      continue;
+    }
+
+    if (marketUnits > 0) {
+      results.push({ id: itemId, status: 'bought', source: 'mixed', marketUnits, shopUnits: remaining, marketCost, shopCost: 'unknown' });
+    } else {
+      results.push({ id: itemId, status: 'bought', source: 'shop', units: remaining, cost: 'unknown' });
+    }
   }
 
   console.log("[replenish] replenishOnce done: totalCost=" + JSON.stringify(totalCost) + " results=" + JSON.stringify(results));
