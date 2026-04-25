@@ -54,18 +54,19 @@ async function checkDailyReset() {
     });
     await setState("battleLog", []);
     await setState("riddleMasterRemaining", null);
-    await setState("rbStateToday", { day: today, fsmDone: false, trioDone: false });
+    await setState(wk("rbStateToday", "normal"), { day: today, fsmDone: false, trioDone: false });
+    await setState(wk("rbStateToday", "isekai"), { day: today, fsmDone: false, trioDone: false });
     await addLog({ type: "system", reason: "Daily reset (" + today + ")" });
     console.log("[SW] Daily reset for " + today);
   }
 }
 
-async function getRbStateToday() {
+async function getRbStateToday(world) {
   const today = getGameDay();
-  let s = await getState("rbStateToday", null);
+  let s = await getState(wk("rbStateToday", world), null);
   if (!s || s.day !== today) {
     s = { day: today, fsmDone: false, trioDone: false };
-    await setState("rbStateToday", s);
+    await setState(wk("rbStateToday", world), s);
   }
   return s;
 }
@@ -105,7 +106,7 @@ async function handleArenaPageReady(msg, senderTabId) {
       message: "Stamina depleted (" + stamina + "), arena sweep paused.",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>⚔</text></svg>",
     });
-    if (world === "normal") await maybeTriggerRb();
+    await maybeTriggerRb(world);
     return;
   }
 
@@ -123,23 +124,24 @@ async function handleArenaPageReady(msg, senderTabId) {
 }
 
 async function handleRbPageReady(msg, senderTabId) {
-  const enabled = await getState("rbAutoEnabled", false);
+  const world = msg.world ?? "normal";
+  const enabled = await getState(wk("rbAutoEnabled", world), false);
   if (!enabled) return;
 
-  await setState("rbTokens", msg.tokens);
-  await setState("rbTabId", senderTabId);
+  await setState(wk("rbTokens", world), msg.tokens);
+  await setState(wk("rbTabId", world), senderTabId);
 
-  const state = await getRbStateToday();
+  const state = await getRbStateToday(world);
 
   if (!state.fsmDone) {
     if (msg.tokens != null && msg.tokens >= 5) {
-      await addLog({ type: "system", reason: "RoB: entering FSM (tokens=" + msg.tokens + ")" });
+      await addLog({ type: "system", reason: "[" + world + "] RoB: entering FSM (tokens=" + msg.tokens + ")" });
       await sendToTab(senderTabId, { type: "ENTER_RB", cost: 5, phase: "fsm" });
     } else {
       state.fsmDone = true;
       state.trioDone = true;
-      await setState("rbStateToday", state);
-      await addLog({ type: "alert", reason: "RoB: insufficient tokens for FSM (" + msg.tokens + "/5), skipping" });
+      await setState(wk("rbStateToday", world), state);
+      await addLog({ type: "alert", reason: "[" + world + "] RoB: insufficient tokens for FSM (" + msg.tokens + "/5), skipping" });
     }
     return;
   }
@@ -147,27 +149,33 @@ async function handleRbPageReady(msg, senderTabId) {
   if (!state.trioDone) {
     const trioMin = await getState("rbTrioMinAfterFSM", RB_DEFAULT_TRIO_MIN);
     if (msg.tokens != null && msg.tokens > trioMin) {
-      await addLog({ type: "system", reason: "RoB: entering Trio (tokens=" + msg.tokens + ")" });
+      await addLog({ type: "system", reason: "[" + world + "] RoB: entering Trio (tokens=" + msg.tokens + ")" });
       await sendToTab(senderTabId, { type: "ENTER_RB", cost: 10, phase: "trio" });
     } else {
       state.trioDone = true;
-      await setState("rbStateToday", state);
-      await addLog({ type: "system", reason: "RoB: skipping Trio (tokens=" + msg.tokens + ", threshold>" + trioMin + ")" });
+      await setState(wk("rbStateToday", world), state);
+      await addLog({ type: "system", reason: "[" + world + "] RoB: skipping Trio (tokens=" + msg.tokens + ", threshold>" + trioMin + ")" });
     }
     return;
   }
 
-  await addLog({ type: "system", reason: "RoB: all done today" });
+  await addLog({ type: "system", reason: "[" + world + "] RoB: all done today" });
 }
 
-async function maybeTriggerRb() {
-  const enabled = await getState("rbAutoEnabled", false);
+function rbUrl(world) {
+  return world === "isekai"
+    ? "https://hentaiverse.org/isekai/?s=Battle&ss=rb"
+    : "https://hentaiverse.org/?s=Battle&ss=rb";
+}
+
+async function maybeTriggerRb(world) {
+  const enabled = await getState(wk("rbAutoEnabled", world), false);
   if (!enabled) return;
-  const state = await getRbStateToday();
+  const state = await getRbStateToday(world);
   if (state.fsmDone && state.trioDone) return;
 
-  const RB_URL = "https://hentaiverse.org/?s=Battle&ss=rb";
-  const tabId = await getState("rbTabId", null);
+  const RB_URL = rbUrl(world);
+  const tabId = await getState(wk("rbTabId", world), null);
   let tab = null;
   if (tabId) {
     try { tab = await chrome.tabs.get(tabId); } catch {}
@@ -176,7 +184,7 @@ async function maybeTriggerRb() {
     await chrome.tabs.update(tab.id, { url: RB_URL });
   } else {
     tab = await chrome.tabs.create({ url: RB_URL, active: false });
-    await setState("rbTabId", tab.id);
+    await setState(wk("rbTabId", world), tab.id);
   }
 }
 
@@ -258,7 +266,7 @@ async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
       message: "All arena difficulties completed!",
       iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
     });
-    if (world === "normal") await maybeTriggerRb();
+    await maybeTriggerRb(world);
     return;
   }
 
@@ -301,18 +309,18 @@ async function handleBattleComplete(msg) {
 
   if (battleType === "rb") {
     const ctx = await getState(wk("battleContext", world), {});
-    const rbState = await getRbStateToday();
+    const rbState = await getRbStateToday(world);
     if (ctx.phase === "fsm") rbState.fsmDone = true;
     if (ctx.phase === "trio") rbState.trioDone = true;
-    await setState("rbStateToday", rbState);
+    await setState(wk("rbStateToday", world), rbState);
     await addLog({
       type: result === "victory" ? "victory" : "defeated",
-      reason: "RoB " + ctx.phase + " " + result,
+      reason: "[" + world + "] RoB " + ctx.phase + " " + result,
     });
     if (!rbState.trioDone) {
-      const rbTabId = await getState("rbTabId", null);
+      const rbTabId = await getState(wk("rbTabId", world), null);
       if (rbTabId) {
-        try { await chrome.tabs.update(rbTabId, { url: "https://hentaiverse.org/?s=Battle&ss=rb" }); } catch {}
+        try { await chrome.tabs.update(rbTabId, { url: rbUrl(world) }); } catch {}
       }
     }
     return;
@@ -355,7 +363,7 @@ async function handleBattleComplete(msg) {
         message: "All arena difficulties completed!",
         iconUrl: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><text y='16' font-size='16'>🏆</text></svg>",
       });
-      if (world === "normal") await maybeTriggerRb();
+      await maybeTriggerRb(world);
       return;
     }
 
@@ -507,16 +515,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
         case "SET_RB_AUTO": {
-          await setState("rbAutoEnabled", msg.enabled);
+          const rbWorld = msg.world ?? "normal";
+          await setState(wk("rbAutoEnabled", rbWorld), msg.enabled);
           if (msg.enabled) {
-            await addLog({ type: "system", reason: "RoB auto started" });
-            const sweepNormal = await getState(wk("arenaSweepEnabled", "normal"), false);
-            const sweepIsekai = await getState(wk("arenaSweepEnabled", "isekai"), false);
-            if (!sweepNormal && !sweepIsekai) {
-              await maybeTriggerRb();
+            await addLog({ type: "system", reason: "[" + rbWorld + "] RoB auto started" });
+            const sweepSame = await getState(wk("arenaSweepEnabled", rbWorld), false);
+            if (!sweepSame) {
+              await maybeTriggerRb(rbWorld);
             }
           } else {
-            await addLog({ type: "system", reason: "RoB auto stopped" });
+            await addLog({ type: "system", reason: "[" + rbWorld + "] RoB auto stopped" });
           }
           break;
         }

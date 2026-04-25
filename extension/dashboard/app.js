@@ -115,9 +115,14 @@ function renderControls() {
   btnUna.className = "toggle-btn " + (unaOn ? "on" : "off");
 
   const btnRb = document.getElementById("btnRingOfBlood");
-  const rbOn = state.rbAutoEnabled ?? false;
+  const rbOn = state.rbAutoEnabled_normal ?? false;
   btnRb.textContent = rbOn ? "ON" : "OFF";
   btnRb.className = "toggle-btn " + (rbOn ? "on" : "off");
+
+  const btnRbIsekai = document.getElementById("btnRingOfBloodIsekai");
+  const rbIsekaiOn = state.rbAutoEnabled_isekai ?? false;
+  btnRbIsekai.textContent = rbIsekaiOn ? "ON" : "OFF";
+  btnRbIsekai.className = "toggle-btn " + (rbIsekaiOn ? "on" : "off");
 
   const statusEl = document.getElementById("currentStatus");
   const lastStatus = state.lastBattleStatus;
@@ -131,16 +136,18 @@ function renderControls() {
 function renderRbStatus() {
   const el = document.getElementById("rbStatus");
   if (!el) return;
-  const enabled = state.rbAutoEnabled ?? false;
-  if (!enabled) {
-    el.textContent = "";
-    return;
+  const parts = [];
+  for (const world of ["normal", "isekai"]) {
+    const enabled = state["rbAutoEnabled_" + world] ?? false;
+    if (!enabled) continue;
+    const s = state["rbStateToday_" + world] ?? {};
+    const tokens = state["rbTokens_" + world] ?? "?";
+    const fsm = s.fsmDone ? "✅" : "⬜";
+    const trio = s.trioDone ? "✅" : "⬜";
+    const label = world === "normal" ? "N" : "I";
+    parts.push(label + " " + fsm + " FSM " + trio + " Trio (t=" + tokens + ")");
   }
-  const s = state.rbStateToday ?? {};
-  const tokens = state.rbTokens ?? "?";
-  const fsm = s.fsmDone ? "✅" : "⬜";
-  const trio = s.trioDone ? "✅" : "⬜";
-  el.textContent = "RoB: " + fsm + " FSM " + trio + " Trio | tokens=" + tokens;
+  el.textContent = parts.length ? "RoB: " + parts.join(" | ") : "";
 }
 
 function renderArenaProgressForWorld(grid, worldLabel, difficulties, progress) {
@@ -493,9 +500,16 @@ document.getElementById("btnUnattended").addEventListener("click", () => {
 });
 
 document.getElementById("btnRingOfBlood").addEventListener("click", () => {
-  const next = !(state.rbAutoEnabled ?? false);
-  state.rbAutoEnabled = next;
-  chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next });
+  const next = !(state.rbAutoEnabled_normal ?? false);
+  state.rbAutoEnabled_normal = next;
+  chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next, world: "normal" });
+  renderControls();
+});
+
+document.getElementById("btnRingOfBloodIsekai").addEventListener("click", () => {
+  const next = !(state.rbAutoEnabled_isekai ?? false);
+  state.rbAutoEnabled_isekai = next;
+  chrome.runtime.sendMessage({ type: "SET_RB_AUTO", enabled: next, world: "isekai" });
   renderControls();
 });
 

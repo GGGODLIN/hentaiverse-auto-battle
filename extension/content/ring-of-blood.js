@@ -2,7 +2,7 @@
   if (!location.hostname.includes("hentaiverse")) return;
   if (!location.search.includes("s=Battle") || !location.search.includes("ss=rb")) return;
 
-  const WORLD = "normal";
+  const WORLD = location.pathname.includes("/isekai/") ? "isekai" : "normal";
   const wk = (key) => key + "_" + WORLD;
 
   function parseChallenges() {
@@ -63,6 +63,7 @@
 
   chrome.runtime.sendMessage({
     type: "RB_PAGE_READY",
+    world: WORLD,
     tokens,
     stamina,
     challenges: parseChallenges(),

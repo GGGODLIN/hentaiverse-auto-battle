@@ -169,7 +169,7 @@ ring-of-blood.js 用 `cost === 5` 識別 FSM，`cost === 10` 識別 Trio。
 
 ## 7. 預設假設（spec 階段確認，後續 plan/build 不再回頭）
 
-- **A1**：RoB 只跑 normal world（不擴展 isekai）
+- **A1**：RoB 兩 world 獨立跑（normal 跟 isekai 各自有 toggle、各自的 token 數、各自的 daily state）。Isekai URL = `https://hentaiverse.org/isekai/?s=Battle&ss=rb`，規則跟 normal 完全相同（FSM 5 token、Trio 10 token、戰敗當日不可重戰）
 - **A2**：cost ∈ {5, 10} 唯一識別 FSM / Trio（HV 不會在 RoB 加另一個 5 或 10 cost challenge；如未來加，cost 條件會誤觸發）
 - **A3**：Trio 觸發條件採 strict `>15`（按 user 字面「超過 15」）
 - **A4**：FSM/Trio 戰敗 → 標記 done（HV 機制：當日該 challenge 不可再戰，不是 design choice）

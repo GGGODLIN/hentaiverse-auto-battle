@@ -447,6 +447,5 @@ function renderRbStatus() {
 ## 不在這次 plan 範圍
 
 - 修改 [extension/content/battle.js](../../extension/content/battle.js) combat AI 邏輯（boundary §6 ask first）
-- isekai 世界 RoB（spec A1 排除）
 - Daily reset 自動 trigger RoB（spec A6 排除，僅 sweep-end trigger）
 - 把 `rbReserveTokens` / `rbTrioMinAfterFSM` 暴露到 dashboard advanced settings
