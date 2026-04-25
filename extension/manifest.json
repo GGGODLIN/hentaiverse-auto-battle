@@ -34,9 +34,20 @@
       "matches": ["*://e-hentai.org/news.php*", "*://www.e-hentai.org/news.php*"],
       "js": ["content/encounter.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"],
+      "js": ["shared/translation-constants.js", "content/translations/loader.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {
     "default_title": "HV Auto Arena"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["content/translations/gm-polyfill.js"],
+      "matches": ["*://hentaiverse.org/*", "*://www.hentaiverse.org/*"]
+    }
+  ]
 }

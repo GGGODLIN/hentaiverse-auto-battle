@@ -1,3 +1,5 @@
+importScripts("/shared/translation-constants.js", "/background/translation-updater.js");
+
 const THIRTY_MIN = 30 * 60 * 1000;
 const ONE_MIN = 60 * 1000;
 const ARENA_URL_NORMAL = "https://hentaiverse.org/?s=Battle&ss=ar";
@@ -511,5 +513,11 @@ chrome.action.onClicked.addListener(async () => {
 
 chrome.runtime.onInstalled.addListener(async () => {
   await checkDailyReset();
+  await ensureTranslationDefaults();
+  try {
+    await fetchTranslation("hv-main");
+  } catch (e) {
+    console.error("[SW] translation fetch failed:", e);
+  }
   console.log("[SW] HV Auto Arena installed/updated");
 });
