@@ -86,6 +86,26 @@ async function sendToTab(tabId, message) {
   }
 }
 
+async function openWorldTab(world, url) {
+  const key = wk("worldTabId", world);
+  const tabId = await getState(key, null);
+  let tab = null;
+  if (tabId) {
+    try { tab = await chrome.tabs.get(tabId); } catch {}
+  }
+  if (tab) {
+    if (tab.url === url) {
+      await chrome.tabs.reload(tab.id);
+    } else {
+      await chrome.tabs.update(tab.id, { url });
+    }
+  } else {
+    tab = await chrome.tabs.create({ url, active: false });
+    await setState(key, tab.id);
+  }
+  return tab.id;
+}
+
 async function handleArenaPageReady(msg, senderTabId) {
   const world = msg.world ?? "normal";
   const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
@@ -113,13 +133,13 @@ async function handleArenaPageReady(msg, senderTabId) {
   if (world === "normal") {
     const shouldCheckEncounter = await shouldDoEncounterFirst();
     if (shouldCheckEncounter) {
-      await setState(wk("arenaTabId", "normal"), senderTabId);
+      await setState(wk("worldTabId", "normal"), senderTabId);
       await doEncounterCheck();
       return;
     }
   }
 
-  await setState(wk("arenaTabId", world), senderTabId);
+  await setState(wk("worldTabId", world), senderTabId);
   await pickAndEnterNextDifficulty(msg.difficulties, senderTabId, world);
 }
 
@@ -129,7 +149,7 @@ async function handleRbPageReady(msg, senderTabId) {
   if (!enabled) return;
 
   await setState(wk("rbTokens", world), msg.tokens);
-  await setState(wk("rbTabId", world), senderTabId);
+  await setState(wk("worldTabId", world), senderTabId);
 
   const state = await getRbStateToday(world);
 
@@ -174,18 +194,7 @@ async function maybeTriggerRb(world) {
   const state = await getRbStateToday(world);
   if (state.fsmDone && state.trioDone) return;
 
-  const RB_URL = rbUrl(world);
-  const tabId = await getState(wk("rbTabId", world), null);
-  let tab = null;
-  if (tabId) {
-    try { tab = await chrome.tabs.get(tabId); } catch {}
-  }
-  if (tab) {
-    await chrome.tabs.update(tab.id, { url: RB_URL });
-  } else {
-    tab = await chrome.tabs.create({ url: RB_URL, active: false });
-    await setState(wk("rbTabId", world), tab.id);
-  }
+  await openWorldTab(world, rbUrl(world));
 }
 
 async function shouldDoEncounterFirst() {
@@ -318,10 +327,7 @@ async function handleBattleComplete(msg) {
       reason: "[" + world + "] RoB " + ctx.phase + " " + result,
     });
     if (!rbState.trioDone) {
-      const rbTabId = await getState(wk("rbTabId", world), null);
-      if (rbTabId) {
-        try { await chrome.tabs.update(rbTabId, { url: rbUrl(world) }); } catch {}
-      }
+      await openWorldTab(world, rbUrl(world));
     }
     return;
   }
@@ -375,17 +381,7 @@ async function handleBattleComplete(msg) {
 }
 
 async function resumeArenaSweep(world) {
-  const url = arenaUrl(world);
-  const arenaTabId = await getState(wk("arenaTabId", world), null);
-  if (arenaTabId) {
-    try {
-      await chrome.tabs.update(arenaTabId, { url });
-      return;
-    } catch {}
-  }
-  const tab = await findOrCreateTab(url);
-  await setState(wk("arenaTabId", world), tab.id);
-  await chrome.tabs.reload(tab.id);
+  await openWorldTab(world, arenaUrl(world));
 }
 
 async function handleEncounterFound(msg, senderTabId) {
