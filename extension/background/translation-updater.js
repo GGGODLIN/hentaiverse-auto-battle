@@ -66,3 +66,44 @@ async function ensureTranslationDefaults() {
     [TRANSLATION_SETTINGS_KEY]: TRANSLATION_DEFAULT_SETTINGS,
   });
 }
+
+async function injectTranslations(tabId, host) {
+  const isHV = host.endsWith("hentaiverse.org");
+  const ids = isHV ? TRANSLATION_HENTAIVERSE_IDS : TRANSLATION_CROSS_DOMAIN_IDS;
+  if (ids.length === 0) return;
+
+  const settingsStored = await chrome.storage.local.get(TRANSLATION_SETTINGS_KEY);
+  const settings = settingsStored[TRANSLATION_SETTINGS_KEY] ?? TRANSLATION_DEFAULT_SETTINGS;
+
+  let polyfillSource;
+  try {
+    const res = await fetch(chrome.runtime.getURL("content/translations/gm-polyfill.js"));
+    polyfillSource = await res.text();
+  } catch (e) {
+    console.error("[SW] polyfill fetch failed:", e);
+    return;
+  }
+
+  for (const id of ids) {
+    if (settings[id] === false) continue;
+    const stored = await chrome.storage.local.get(TRANSLATION_KEY_PREFIX + id);
+    const entry = stored[TRANSLATION_KEY_PREFIX + id];
+    if (!entry?.source) continue;
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: "MAIN",
+        func: (poly, src, name) => {
+          try {
+            new Function(poly + ";\n" + src)();
+          } catch (e) {
+            console.error("[Translation:" + name + "] error:", e);
+          }
+        },
+        args: [polyfillSource, entry.source, id],
+      });
+    } catch (e) {
+      console.error("[SW] inject failed for " + id + ":", e);
+    }
+  }
+}

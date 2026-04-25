@@ -3,7 +3,7 @@
   "name": "HV Auto Arena",
   "version": "4.1",
   "description": "Auto battle, arena sweep, and encounter farming for HentaiVerse",
-  "permissions": ["storage", "alarms", "tabs", "notifications"],
+  "permissions": ["storage", "alarms", "tabs", "notifications", "scripting"],
   "host_permissions": [
     "*://hentaiverse.org/*",
     "*://www.hentaiverse.org/*",
