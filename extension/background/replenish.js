@@ -259,6 +259,26 @@ async function shopBuy(itemId, count, storetoken) {
   }
 }
 
+async function appendReplenishLog(entry) {
+  try {
+    const stored = await chrome.storage.local.get('replenishLog');
+    const log = stored.replenishLog ?? [];
+    log.unshift(entry);
+    if (log.length > 100) log.length = 100;
+    await chrome.storage.local.set({ replenishLog: log });
+  } catch (err) {
+    console.log("[replenish] appendReplenishLog error: " + JSON.stringify(err.message));
+  }
+}
+
+function formatHHMMSS(ts) {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return hh + ':' + mm + ':' + ss;
+}
+
 async function replenishOnce(replenishConfig) {
   const dryResult = await dryRun();
   if (!dryResult.success) return dryResult;
@@ -353,6 +373,23 @@ async function replenishOnce(replenishConfig) {
       results.push({ id: itemId, status: 'bought', source: 'shop', units: remaining, cost: 'unknown' });
     }
   }
+
+  const successCount = results.filter((r) => r.status === 'bought').length;
+  const failedCount = results.filter((r) => r.status === 'failed' || r.status === 'partial').length;
+  const overall = failedCount > 0 && successCount === 0 ? 'failed'
+    : failedCount > 0 ? 'partial'
+    : 'success';
+
+  const ts = Date.now();
+  const logEntry = {
+    ts,
+    time: formatHHMMSS(ts),
+    totalCost,
+    items: results,
+    overall,
+  };
+
+  await appendReplenishLog(logEntry);
 
   console.log("[replenish] replenishOnce done: totalCost=" + JSON.stringify(totalCost) + " results=" + JSON.stringify(results));
   return { success: true, results, totalCost };

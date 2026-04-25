@@ -567,6 +567,87 @@ function renderReplenishStatus(inventories) {
   }
 }
 
+function renderReplenishLog() {
+  const container = document.getElementById('replenishLog');
+  if (!container) return;
+  const log = state.replenishLog ?? [];
+  const recent = log.slice(0, 10);
+  container.innerHTML = '';
+
+  const heading = document.createElement('div');
+  heading.className = 'replenish-log-heading';
+  heading.textContent = '補貨記錄';
+  container.appendChild(heading);
+
+  if (recent.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'replenish-log-empty';
+    empty.textContent = '尚無記錄';
+    container.appendChild(empty);
+    return;
+  }
+
+  const ITEM_NAME = Object.fromEntries(REPLENISH_ITEMS.map((i) => [i.id, i.name]));
+
+  for (const entry of recent) {
+    const icon = entry.overall === 'success' ? '✅' : entry.overall === 'partial' ? '⚠️' : '❌';
+    const boughtItems = (entry.items ?? []).filter((r) => r.status === 'bought' || r.status === 'partial');
+    const boughtCount = boughtItems.length;
+    const totalItems = (entry.items ?? []).filter((r) => r.status !== 'skipped').length;
+    const costStr = (entry.totalCost ?? 0).toLocaleString();
+
+    const row = document.createElement('div');
+    row.className = 'replenish-log-row';
+
+    const summary = document.createElement('div');
+    summary.className = 'replenish-log-summary';
+    summary.textContent = icon + ' ' + entry.time + '  補貨 ' + boughtCount + '/' + totalItems + '，總成本 ' + costStr + ' C';
+    row.appendChild(summary);
+
+    const detail = document.createElement('div');
+    detail.className = 'replenish-log-detail';
+
+    for (const item of (entry.items ?? [])) {
+      if (item.status === 'skipped') continue;
+      const name = ITEM_NAME[item.id] ?? item.id;
+      const lineEl = document.createElement('div');
+      lineEl.className = 'replenish-log-item';
+
+      let text = '- ' + name + ': ';
+      if (item.status === 'bought') {
+        if (item.source === 'market') {
+          const cost = typeof item.cost === 'number' ? item.cost.toLocaleString() : item.cost;
+          text += 'market ' + (item.units ?? '') + ' @ ' + cost + ' C';
+        } else if (item.source === 'shop') {
+          text += 'shop ' + (item.units ?? '');
+        } else if (item.source === 'mixed') {
+          const mCost = typeof item.marketCost === 'number' ? item.marketCost.toLocaleString() : (item.marketCost ?? '?');
+          text += 'mixed market×' + item.marketUnits + ' (' + mCost + ' C) + shop×' + item.shopUnits;
+        } else {
+          text += item.source ?? '';
+        }
+      } else if (item.status === 'partial') {
+        text += 'partial market×' + (item.marketUnits ?? 0) + ' (shop failed)';
+      } else if (item.status === 'failed') {
+        text += 'failed: ' + (item.reason ?? item.marketError ?? '');
+      }
+
+      lineEl.textContent = text;
+      detail.appendChild(lineEl);
+    }
+
+    row.appendChild(detail);
+
+    summary.addEventListener('click', () => {
+      const expanded = row.dataset.expanded === 'true';
+      row.dataset.expanded = expanded ? 'false' : 'true';
+      detail.style.display = expanded ? 'none' : 'block';
+    });
+
+    container.appendChild(row);
+  }
+}
+
 function renderAll() {
   updateResetTimer();
   renderControls();
@@ -580,6 +661,7 @@ function renderAll() {
   renderLog();
   renderTranslations();
   renderReplenishConfig();
+  renderReplenishLog();
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
