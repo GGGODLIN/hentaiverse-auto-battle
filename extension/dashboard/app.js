@@ -646,6 +646,37 @@ document.getElementById("btnTranslationUpdate")?.addEventListener("click", async
   }
 });
 
+document.getElementById('btnReplenishTest').addEventListener('click', async () => { // TODO: remove in T4
+  const btn = document.getElementById('btnReplenishTest');
+  let statusEl = document.getElementById('replenishStatus');
+  if (!statusEl) {
+    statusEl = document.createElement('span');
+    statusEl.id = 'replenishStatus';
+    statusEl.style.cssText = 'margin-left:8px;font-size:12px;color:#aaa;';
+    btn.parentNode.appendChild(statusEl);
+  }
+  btn.disabled = true;
+  statusEl.textContent = '下單中…';
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_SINGLE', replenishConfig: getReplenishConfig() });
+    if (resp?.success) {
+      const { item } = resp;
+      const itemDef = REPLENISH_ITEMS.find((i) => i.id === item.id);
+      const name = itemDef?.name ?? item.id;
+      statusEl.style.color = '#66BB6A';
+      statusEl.textContent = '已下單: ' + name + ' ×' + item.unitsBought + ' @ ' + item.pricePerPack.toLocaleString() + ' C/包 (總 ' + item.totalCost.toLocaleString() + ' C)';
+    } else {
+      statusEl.style.color = '#EF5350';
+      statusEl.textContent = '錯誤: ' + (resp?.error ?? '未知錯誤');
+    }
+  } catch (e) {
+    statusEl.style.color = '#EF5350';
+    statusEl.textContent = '錯誤: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('btnReplenish').addEventListener('click', async () => {
   const btn = document.getElementById('btnReplenish');
   let statusEl = document.getElementById('replenishStatus');
