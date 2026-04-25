@@ -1,4 +1,5 @@
 const REPLENISH_MARKET_URL = "https://hentaiverse.org/?s=Bazaar&ss=mk&screen=browseitems&filter=co";
+const REPLENISH_DEPOSIT_FLOOR = 100000;
 
 const RESTORATIVE_IDS = ['11191', '11195', '11199', '11291', '11295', '11299', '11391', '11395', '11399'];
 
@@ -94,8 +95,50 @@ async function fetchMarketDetail(itemId) {
 
     if (lowestAsk == null) return { success: false, error: 'parse: could not find lowest ask price in order book' };
 
-    console.log("[replenish] fetchMarketDetail itemId=" + JSON.stringify(itemId) + " lowestAsk=" + JSON.stringify(lowestAsk));
-    return { success: true, marketoken, submitValue, lowestAsk };
+    const depositSubmitInput = doc.querySelector('input[name="account_deposit"]');
+    if (!depositSubmitInput) return { success: false, error: 'parse: account_deposit input not found' };
+    const accountDepositSubmitValue = depositSubmitInput.value;
+
+    const allText = doc.body?.textContent ?? '';
+    const balancePattern = /[\d]{1,3}(?:,\d{3})*/g;
+
+    let marketBalance = null;
+    let accountBalance = null;
+
+    const bodyHtml = doc.body?.innerHTML ?? '';
+    const mktMatch = bodyHtml.match(/[Mm]arket\s*[Bb]alance[^<]*?(\d[\d,]+)\s*C|余额[^<]*?(\d[\d,]+)\s*C|(\d[\d,]+)\s*C[^<]*?[Mm]arket|市場余额[^>]*?(\d[\d,]+)/);
+    if (mktMatch) {
+      const raw = (mktMatch[1] ?? mktMatch[2] ?? mktMatch[3] ?? mktMatch[4] ?? '').replace(/,/g, '');
+      const parsed = parseInt(raw, 10);
+      if (!Number.isNaN(parsed)) marketBalance = parsed;
+    }
+
+    const acctMatch = bodyHtml.match(/[Aa]ccount\s*[Bb]alance[^<]*?(\d[\d,]+)\s*C|帳戶余额[^<]*?(\d[\d,]+)\s*C|(\d[\d,]+)\s*C[^<]*?[Aa]ccount/);
+    if (acctMatch) {
+      const raw = (acctMatch[1] ?? acctMatch[2] ?? acctMatch[3] ?? '').replace(/,/g, '');
+      const parsed = parseInt(raw, 10);
+      if (!Number.isNaN(parsed)) accountBalance = parsed;
+    }
+
+    if (marketBalance == null || accountBalance == null) {
+      const accountAmountInput = doc.querySelector('input[name="account_amount"]');
+      if (accountAmountInput) {
+        const form = accountAmountInput.closest('form');
+        if (form) {
+          const formText = form.textContent ?? '';
+          const nums = [...formText.matchAll(/(\d[\d,]+)\s*C/g)].map((m) => parseInt(m[1].replace(/,/g, ''), 10)).filter((n) => !Number.isNaN(n));
+          if (nums.length >= 2 && marketBalance == null) marketBalance = nums[0];
+          if (nums.length >= 2 && accountBalance == null) accountBalance = nums[1];
+          if (nums.length === 1 && marketBalance == null) marketBalance = nums[0];
+        }
+      }
+    }
+
+    if (marketBalance == null) return { success: false, error: 'parse: marketBalance not found' };
+    if (accountBalance == null) return { success: false, error: 'parse: accountBalance not found' };
+
+    console.log("[replenish] fetchMarketDetail itemId=" + JSON.stringify(itemId) + " lowestAsk=" + JSON.stringify(lowestAsk) + " marketBalance=" + JSON.stringify(marketBalance) + " accountBalance=" + JSON.stringify(accountBalance));
+    return { success: true, marketoken, submitValue, lowestAsk, marketBalance, accountBalance, accountDepositSubmitValue };
   } catch (err) {
     console.log("[replenish] fetchMarketDetail error: " + JSON.stringify(err.message));
     return { success: false, error: err.message };
@@ -132,54 +175,98 @@ async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValu
   }
 }
 
-async function replenishSingleTest(replenishConfig) {
+async function deposit(amount, marketoken, depositSubmitValue) {
+  const url = "https://hentaiverse.org/?s=Bazaar&ss=mk";
+  try {
+    const body = new URLSearchParams({
+      marketoken,
+      account_amount: String(amount),
+      account_deposit: depositSubmitValue,
+    });
+    const res = await fetch(url, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+
+    if (res.url.includes('s=Login') || /name="UserName"/i.test(text)) {
+      return { success: false, error: 'session expired (redirected to login)' };
+    }
+
+    console.log("[replenish] deposit amount=" + JSON.stringify(amount));
+    return { success: true };
+  } catch (err) {
+    console.log("[replenish] deposit error: " + JSON.stringify(err.message));
+    return { success: false, error: err.message };
+  }
+}
+
+async function replenishOnce(replenishConfig) {
   const dryResult = await dryRun();
   if (!dryResult.success) return dryResult;
 
   const { inventories } = dryResult;
+  const results = [];
+  let totalCost = 0;
 
-  let biggestShortfallId = null;
-  let biggestShortfall = 0;
-
-  for (const [id, count] of Object.entries(inventories)) {
-    const cfg = replenishConfig?.[id];
+  for (const itemId of RESTORATIVE_IDS) {
+    const cfg = replenishConfig?.[itemId];
     if (!cfg) continue;
-    if (count < cfg.low) {
-      const shortfall = cfg.low - count;
-      if (shortfall > biggestShortfall) {
-        biggestShortfall = shortfall;
-        biggestShortfallId = id;
+    const inv = inventories[itemId] ?? 0;
+    if (inv >= cfg.low) {
+      results.push({ id: itemId, status: 'skipped', reason: 'already >= low (' + inv + ')' });
+      continue;
+    }
+
+    let detail = await fetchMarketDetail(itemId);
+    if (!detail.success) {
+      results.push({ id: itemId, status: 'failed', reason: detail.error });
+      continue;
+    }
+
+    const packSize = packSizeFor(itemId);
+    const shortfall = cfg.target - inv;
+    const packsNeeded = Math.ceil(shortfall / packSize);
+    const cost = packsNeeded * detail.lowestAsk;
+
+    if (detail.marketBalance < cost || detail.marketBalance < REPLENISH_DEPOSIT_FLOOR) {
+      const depositAmount = REPLENISH_DEPOSIT_FLOOR - detail.marketBalance;
+      if (depositAmount > 0) {
+        if (depositAmount > detail.accountBalance) {
+          results.push({ id: itemId, status: 'failed', reason: 'insufficient account balance to deposit (need ' + depositAmount + ', have ' + detail.accountBalance + ')' });
+          continue;
+        }
+        const depositRes = await deposit(depositAmount, detail.marketoken, detail.accountDepositSubmitValue);
+        if (!depositRes.success) {
+          results.push({ id: itemId, status: 'failed', reason: 'deposit failed: ' + depositRes.error });
+          continue;
+        }
+        console.log("[replenish] deposited " + JSON.stringify(depositAmount) + " for item " + JSON.stringify(itemId));
+        const refresh = await fetchMarketDetail(itemId);
+        if (!refresh.success) {
+          results.push({ id: itemId, status: 'failed', reason: 'refresh-after-deposit: ' + refresh.error });
+          continue;
+        }
+        detail = refresh;
       }
     }
+
+    const orderRes = await placeBuyOrder(itemId, packsNeeded, detail.lowestAsk, detail.marketoken, detail.submitValue);
+    if (!orderRes.success) {
+      results.push({ id: itemId, status: 'failed', reason: orderRes.error });
+      continue;
+    }
+
+    results.push({ id: itemId, status: 'bought', packs: packsNeeded, unitsBought: packsNeeded * packSize, pricePerPack: detail.lowestAsk, cost });
+    totalCost += cost;
   }
 
-  if (biggestShortfallId == null) {
-    return { success: false, error: 'no shortfall' };
-  }
-
-  const itemId = biggestShortfallId;
-  const detailResult = await fetchMarketDetail(itemId);
-  if (!detailResult.success) return detailResult;
-
-  const { marketoken, submitValue, lowestAsk } = detailResult;
-  const packSize = packSizeFor(itemId);
-  const packs = 1;
-  const totalCost = lowestAsk * packs;
-
-  const orderResult = await placeBuyOrder(itemId, packs, lowestAsk, marketoken, submitValue);
-  if (!orderResult.success) return orderResult;
-
-  return {
-    success: true,
-    item: {
-      id: itemId,
-      packs,
-      unitsBought: packs * packSize,
-      pricePerPack: lowestAsk,
-      totalCost,
-    },
-  };
+  console.log("[replenish] replenishOnce done: totalCost=" + JSON.stringify(totalCost) + " results=" + JSON.stringify(results));
+  return { success: true, results, totalCost };
 }
 
 globalThis.replenishDryRun = dryRun;
-globalThis.replenishSingleTest = replenishSingleTest;
+globalThis.replenishOnce = replenishOnce;

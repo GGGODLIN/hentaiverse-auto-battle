@@ -417,7 +417,7 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
-  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_SINGLE";
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_RUN";
 
   (async () => {
     try {
@@ -587,9 +587,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return;
       }
 
-      case "REPLENISH_SINGLE": {
-        const singleResult = await replenishSingleTest(msg.replenishConfig);
-        sendResponse(singleResult);
+      case "REPLENISH_RUN": {
+        const runResult = await replenishOnce(msg.replenishConfig);
+        sendResponse(runResult);
         return;
       }
 

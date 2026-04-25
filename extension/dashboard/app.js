@@ -646,37 +646,6 @@ document.getElementById("btnTranslationUpdate")?.addEventListener("click", async
   }
 });
 
-document.getElementById('btnReplenishTest').addEventListener('click', async () => { // TODO: remove in T4
-  const btn = document.getElementById('btnReplenishTest');
-  let statusEl = document.getElementById('replenishStatus');
-  if (!statusEl) {
-    statusEl = document.createElement('span');
-    statusEl.id = 'replenishStatus';
-    statusEl.style.cssText = 'margin-left:8px;font-size:12px;color:#aaa;';
-    btn.parentNode.appendChild(statusEl);
-  }
-  btn.disabled = true;
-  statusEl.textContent = '下單中…';
-  try {
-    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_SINGLE', replenishConfig: getReplenishConfig() });
-    if (resp?.success) {
-      const { item } = resp;
-      const itemDef = REPLENISH_ITEMS.find((i) => i.id === item.id);
-      const name = itemDef?.name ?? item.id;
-      statusEl.style.color = '#66BB6A';
-      statusEl.textContent = '已下單: ' + name + ' ×' + item.unitsBought + ' @ ' + item.pricePerPack.toLocaleString() + ' C/包 (總 ' + item.totalCost.toLocaleString() + ' C)';
-    } else {
-      statusEl.style.color = '#EF5350';
-      statusEl.textContent = '錯誤: ' + (resp?.error ?? '未知錯誤');
-    }
-  } catch (e) {
-    statusEl.style.color = '#EF5350';
-    statusEl.textContent = '錯誤: ' + e.message;
-  } finally {
-    btn.disabled = false;
-  }
-});
-
 document.getElementById('btnReplenish').addEventListener('click', async () => {
   const btn = document.getElementById('btnReplenish');
   let statusEl = document.getElementById('replenishStatus');
@@ -687,15 +656,30 @@ document.getElementById('btnReplenish').addEventListener('click', async () => {
     btn.parentNode.appendChild(statusEl);
   }
   btn.disabled = true;
-  statusEl.textContent = '查詢中…';
+  statusEl.style.color = '#aaa';
+  statusEl.textContent = '補貨中…';
   try {
-    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_DRY_RUN' });
+    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_RUN', replenishConfig: getReplenishConfig() });
     if (resp?.success) {
-      const lastInventory = { ts: Date.now(), inventories: resp.inventories };
-      state.replenishLastInventory = lastInventory;
-      chrome.storage.local.set({ replenishLastInventory: lastInventory });
-      renderReplenishStatus(resp.inventories);
-      statusEl.textContent = '';
+      const { results, totalCost } = resp;
+      const bought = results.filter((r) => r.status === 'bought');
+      const failed = results.filter((r) => r.status === 'failed');
+      const skipped = results.filter((r) => r.status === 'skipped');
+      const lines = [];
+      for (const r of bought) {
+        const itemDef = REPLENISH_ITEMS.find((i) => i.id === r.id);
+        const name = itemDef?.name ?? r.id;
+        lines.push('✅ ' + name + ' ×' + r.unitsBought + ' (' + r.cost.toLocaleString() + ' C)');
+      }
+      for (const r of failed) {
+        const itemDef = REPLENISH_ITEMS.find((i) => i.id === r.id);
+        const name = itemDef?.name ?? r.id;
+        lines.push('❌ ' + name + ': ' + r.reason);
+      }
+      if (skipped.length > 0) lines.push('⏭ ' + skipped.length + ' 項已足夠');
+      if (bought.length > 0) lines.push('總計: ' + totalCost.toLocaleString() + ' C');
+      statusEl.style.color = failed.length > 0 ? '#EF5350' : '#66BB6A';
+      statusEl.textContent = lines.join(' | ');
     } else {
       statusEl.style.color = '#EF5350';
       statusEl.textContent = '錯誤: ' + (resp?.error ?? '未知錯誤');
