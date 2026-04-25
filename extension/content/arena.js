@@ -58,6 +58,24 @@
     return match ? parseInt(match[1]) : null;
   }
 
+  async function preflightReplenish() {
+    let resp;
+    try {
+      resp = await chrome.runtime.sendMessage({ type: "REPLENISH_PREFLIGHT", world: WORLD });
+    } catch (e) {
+      console.log("[AA] arena preflight: sendMessage error, proceeding: " + e.message);
+      return true;
+    }
+    if (!resp) {
+      console.log("[AA] arena preflight: no response from service worker, proceeding");
+      return true;
+    }
+    if (resp.skip) return true;
+    if (resp.success) return true;
+    console.log("[AA] arena preflight FAILED: " + JSON.stringify(resp));
+    return false;
+  }
+
   async function enterArena(difficultyId, token) {
     const form = document.getElementById("initform");
     if (!form) return false;
@@ -66,6 +84,11 @@
     initId.value = difficultyId;
     const initToken = form.querySelector('input[name="inittoken"]');
     if (initToken && token) initToken.value = token;
+    const proceed = await preflightReplenish();
+    if (!proceed) {
+      console.log("[AA] arena preflight FAILED, aborting entry for difficultyId=" + difficultyId);
+      return false;
+    }
     await chrome.storage.local.set({
       [wk("autoArena")]: true,
       [wk("battleContext")]: { type: "arena", difficultyId, world: WORLD },
