@@ -20,10 +20,10 @@
       const enabled = !!onclick && !startImg.src.includes("_d.png");
       let id = null;
       let token = null;
-      const initMatch = onclick.match(/init_battle\((\d+),\s*(\d+),\s*'([^']+)'\)/);
+      const initMatch = onclick.match(/init_battle\((\d+)(?:,\s*(\d+))?(?:,\s*'([^']+)')?\)/);
       if (initMatch) {
         id = parseInt(initMatch[1]);
-        token = initMatch[3];
+        token = initMatch[3] ?? null;
       }
       out.push({ cost, enabled, id, token });
     }
@@ -50,7 +50,8 @@
       [wk("battleContext")]: { type: "rb", phase, world: WORLD },
     });
     document.getElementById("initid").value = target.id;
-    document.getElementById("inittoken").value = target.token;
+    const initToken = document.getElementById("inittoken");
+    if (initToken && target.token) initToken.value = target.token;
     document.getElementById("initform").submit();
     return true;
   }
