@@ -56,6 +56,20 @@
     }
   }
 
+  async function preflightRepair() {
+    const enabled = (await chrome.storage.local.get('repairEnabled_' + WORLD))['repairEnabled_' + WORLD] ?? false;
+    if (!enabled) return true;
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: 'REPAIR_PREFLIGHT', world: WORLD });
+      if (!resp || resp.skip || resp.success) return true;
+      console.log('[AA] repair preflight FAILED: ' + JSON.stringify(resp));
+      return false;
+    } catch (e) {
+      console.log('[AA] repair preflight error (proceeding): ' + JSON.stringify(e?.message));
+      return true;
+    }
+  }
+
   async function enterChallenge(cost, phase) {
     const target = parseChallenges().find((c) => c.cost === cost && c.enabled);
     if (!target?.id) return false;
@@ -67,6 +81,7 @@
     const initToken = document.getElementById("inittoken");
     if (initToken && target.token) initToken.value = target.token;
     if (!await preflightReplenish()) return false;
+    if (!await preflightRepair()) return false;
     document.getElementById("initform").submit();
     return true;
   }

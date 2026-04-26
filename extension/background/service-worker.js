@@ -1,4 +1,4 @@
-importScripts("/shared/translation-constants.js", "/background/translation-updater.js", "/background/replenish.js");
+importScripts("/shared/translation-constants.js", "/background/translation-updater.js", "/background/replenish.js", "/background/equipmentRepair.js");
 
 const THIRTY_MIN = 30 * 60 * 1000;
 const ONE_MIN = 60 * 1000;
@@ -452,7 +452,7 @@ function wait(ms) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab?.id;
-  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_RUN" || msg.type === "REPLENISH_PREFLIGHT";
+  const needsResponse = msg.type === "GET_FULL_STATE" || msg.type === "RM_SOLVE" || msg.type === "FETCH_TRANSLATIONS" || msg.type === "REPLENISH_DRY_RUN" || msg.type === "REPLENISH_RUN" || msg.type === "REPLENISH_PREFLIGHT" || msg.type === "REPAIR_RUN" || msg.type === "REPAIR_PREFLIGHT";
 
   (async () => {
     try {
@@ -644,6 +644,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       case "REPLENISH_PREFLIGHT": {
         const preflightResult = await replenishPreflight(msg.world ?? "normal");
+        sendResponse(preflightResult);
+        return;
+      }
+
+      case "REPAIR_RUN": {
+        if (msg.world) {
+          const runResult = await repairOnce(msg.world);
+          sendResponse(runResult);
+        } else {
+          const normalResult = await repairOnce("normal");
+          const isekaiResult = await repairOnce("isekai");
+          sendResponse({ normal: normalResult, isekai: isekaiResult });
+        }
+        return;
+      }
+
+      case "REPAIR_PREFLIGHT": {
+        const preflightResult = await repairPreflight(msg.world ?? "normal");
         sendResponse(preflightResult);
         return;
       }

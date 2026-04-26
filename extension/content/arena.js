@@ -76,6 +76,21 @@
     return false;
   }
 
+  async function preflightRepair() {
+    let resp;
+    try {
+      resp = await chrome.runtime.sendMessage({ type: "REPAIR_PREFLIGHT", world: WORLD });
+    } catch (e) {
+      console.log("[AA] arena repair preflight: sendMessage error, proceeding: " + e.message);
+      return true;
+    }
+    if (!resp) return true;
+    if (resp.skip) return true;
+    if (resp.success) return true;
+    console.log("[AA] arena repair preflight FAILED: " + JSON.stringify(resp));
+    return false;
+  }
+
   async function enterArena(difficultyId, token) {
     const form = document.getElementById("initform");
     if (!form) return false;
@@ -87,6 +102,11 @@
     const proceed = await preflightReplenish();
     if (!proceed) {
       console.log("[AA] arena preflight FAILED, aborting entry for difficultyId=" + difficultyId);
+      return false;
+    }
+    const proceedRepair = await preflightRepair();
+    if (!proceedRepair) {
+      console.log("[AA] arena repair preflight FAILED, aborting entry for difficultyId=" + difficultyId);
       return false;
     }
     await chrome.storage.local.set({

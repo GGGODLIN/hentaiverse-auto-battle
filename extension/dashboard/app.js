@@ -158,6 +158,20 @@ function renderControls() {
   btnReplenishIsekai.textContent = replenishIsekaiOn ? "ON" : "OFF";
   btnReplenishIsekai.className = "toggle-btn " + (replenishIsekaiOn ? "on" : "off");
 
+  const btnRepairNormal = document.getElementById("btnRepairModeNormal");
+  if (btnRepairNormal) {
+    const repairNormalOn = state.repairEnabled_normal ?? false;
+    btnRepairNormal.textContent = repairNormalOn ? "ON" : "OFF";
+    btnRepairNormal.className = "toggle-btn " + (repairNormalOn ? "on" : "off");
+  }
+
+  const btnRepairIsekai = document.getElementById("btnRepairModeIsekai");
+  if (btnRepairIsekai) {
+    const repairIsekaiOn = state.repairEnabled_isekai ?? false;
+    btnRepairIsekai.textContent = repairIsekaiOn ? "ON" : "OFF";
+    btnRepairIsekai.className = "toggle-btn " + (repairIsekaiOn ? "on" : "off");
+  }
+
   const statusEl = document.getElementById("currentStatus");
   const lastStatus = state.lastBattleStatus;
   if (lastStatus) {
@@ -736,6 +750,73 @@ function renderReplenishLog() {
   }
 }
 
+function renderRepairAbortAlerts() {
+  const container = document.getElementById('repairAbortAlerts');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (const world of ['normal', 'isekai']) {
+    const reason = state['repairAbortReason_' + world];
+    if (!reason) continue;
+
+    const alert = document.createElement('div');
+    alert.className = 'replenish-abort-alert';
+
+    const text = document.createElement('span');
+    const worldLabel = world === 'normal' ? 'N' : 'I';
+    const time = new Date(reason.ts).toLocaleTimeString();
+    text.textContent = '⚠️ [' + worldLabel + '] 修裝失敗: ' + reason.reason + ' (' + time + ') autoArena 已自動關閉';
+    alert.appendChild(text);
+
+    const close = document.createElement('button');
+    close.textContent = '✕';
+    close.className = 'replenish-abort-close';
+    close.addEventListener('click', async () => {
+      await chrome.storage.local.remove('repairAbortReason_' + world);
+      delete state['repairAbortReason_' + world];
+      renderRepairAbortAlerts();
+    });
+    alert.appendChild(close);
+
+    container.appendChild(alert);
+  }
+}
+
+function renderRepairLog() {
+  const container = document.getElementById('repairLog');
+  if (!container) return;
+  const log = state.repairLog ?? [];
+  const recent = log.slice(0, 10);
+  container.innerHTML = '';
+
+  const heading = document.createElement('div');
+  heading.className = 'replenish-log-heading';
+  heading.textContent = '修裝記錄';
+  container.appendChild(heading);
+
+  if (recent.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'replenish-log-empty';
+    empty.textContent = '尚無記錄';
+    container.appendChild(empty);
+    return;
+  }
+
+  for (const entry of recent) {
+    const icons = { repaired: '✅', skipped: '➖', partial: '⚠️', failed: '❌' };
+    const icon = icons[entry.outcome] ?? '❓';
+    const worldBadge = entry.world === 'normal' ? '[N]' : entry.world === 'isekai' ? '[I]' : '[?]';
+    const reasonStr = entry.reason ? '  ' + entry.reason : '';
+    const row = document.createElement('div');
+    row.className = 'replenish-log-row';
+    const summary = document.createElement('div');
+    summary.className = 'replenish-log-summary';
+    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  ' + entry.outcome + reasonStr;
+    row.appendChild(summary);
+    container.appendChild(row);
+  }
+}
+
 function renderAll() {
   updateResetTimer();
   renderControls();
@@ -751,6 +832,8 @@ function renderAll() {
   renderReplenishConfig();
   renderReplenishAbortAlerts();
   renderReplenishLog();
+  renderRepairAbortAlerts();
+  renderRepairLog();
 }
 
 document.getElementById("btnArenaSweep").addEventListener("click", async () => {
@@ -843,6 +926,73 @@ document.getElementById("btnReplenishModeIsekai").addEventListener("click", asyn
   renderControls();
   renderReplenishAbortAlerts();
 });
+
+document.getElementById("btnRepairModeNormal")?.addEventListener("click", async () => {
+  const cur = state.repairEnabled_normal ?? false;
+  const next = !cur;
+  await chrome.storage.local.set({ repairEnabled_normal: next });
+  state.repairEnabled_normal = next;
+  if (next) {
+    await chrome.storage.local.remove('repairAbortReason_normal');
+    delete state['repairAbortReason_normal'];
+  }
+  renderControls();
+  renderRepairAbortAlerts();
+});
+
+document.getElementById("btnRepairModeIsekai")?.addEventListener("click", async () => {
+  const cur = state.repairEnabled_isekai ?? false;
+  const next = !cur;
+  await chrome.storage.local.set({ repairEnabled_isekai: next });
+  state.repairEnabled_isekai = next;
+  if (next) {
+    await chrome.storage.local.remove('repairAbortReason_isekai');
+    delete state['repairAbortReason_isekai'];
+  }
+  renderControls();
+  renderRepairAbortAlerts();
+});
+
+async function runManualRepair(world) {
+  const btn = document.getElementById(world === 'normal' ? 'btnRepairNormal' : 'btnRepairIsekai');
+  if (!btn) return;
+  let statusEl = document.getElementById('repairStatus_' + world);
+  if (!statusEl) {
+    statusEl = document.createElement('span');
+    statusEl.id = 'repairStatus_' + world;
+    statusEl.style.cssText = 'margin-left:8px;font-size:12px;color:#aaa;';
+    btn.parentNode.appendChild(statusEl);
+  }
+  btn.disabled = true;
+  statusEl.style.color = '#aaa';
+  statusEl.textContent = '修裝中…';
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'REPAIR_RUN', world });
+    if (!resp) {
+      statusEl.style.color = '#EF5350';
+      statusEl.textContent = '無回應';
+    } else if (!resp.success) {
+      statusEl.style.color = '#EF5350';
+      statusEl.textContent = '失敗: ' + (resp.error ?? '未知');
+    } else if (resp.repaired) {
+      statusEl.style.color = '#66BB6A';
+      statusEl.textContent = '已修裝';
+    } else {
+      statusEl.style.color = '#66BB6A';
+      statusEl.textContent = '不需修裝';
+    }
+    await loadState();
+    renderRepairLog();
+  } catch (e) {
+    statusEl.style.color = '#EF5350';
+    statusEl.textContent = '錯誤: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btnRepairNormal')?.addEventListener('click', () => runManualRepair('normal'));
+document.getElementById('btnRepairIsekai')?.addEventListener('click', () => runManualRepair('isekai'));
 
 document.getElementById("btnTranslationUpdate")?.addEventListener("click", async () => {
   const btn = document.getElementById("btnTranslationUpdate");
