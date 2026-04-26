@@ -292,8 +292,7 @@
         };
         if (rawHp > 0 && rawHp < 200 && !healsAvail.qb3 && !healsAvail.qb4 &&
           !healsAvail.ikey3 && !healsAvail.ikey7) {
-          retryOrAlert("CRITICAL HP", "HP < 200 & no heals available!");
-          return;
+          if (!retryOrAlert("CRITICAL HP", "HP < 200 & no heals available!")) return;
         }
 
         const t0 = getToggles();
@@ -302,16 +301,14 @@
             const spCanRecover = (t0.ikey6 && document.getElementById("ikey_6")) ||
               (t0.ikey9 && document.getElementById("ikey_9"));
             if (!spCanRecover) {
-              retryOrAlert("SP CRITICAL", "SP too low for Spark & no potions!");
-              return;
+              if (!retryOrAlert("SP CRITICAL", "SP too low for Spark & no potions!")) return;
             }
           }
           if (s.mpP < 20) {
             const mpCanRecover = (t0.ikey4 && document.getElementById("ikey_4")) ||
               (t0.ikey8 && document.getElementById("ikey_8"));
             if (!mpCanRecover) {
-              retryOrAlert("MP CRITICAL", "MP too low for autocast & no potions!");
-              return;
+              if (!retryOrAlert("MP CRITICAL", "MP too low for autocast & no potions!")) return;
             }
           }
         }
@@ -356,8 +353,7 @@
               }
             }
             if (!recovered) {
-              retryOrAlert("ANTI-CHEAT", "Battle stalled after retries!", true);
-              return;
+              if (!retryOrAlert("ANTI-CHEAT", "Battle stalled after retries!", true)) return;
             }
             idleLoops = 0;
             continue;
@@ -442,12 +438,10 @@
 
             const reason = sr.hpP < 50 ? "HP" : sr.mpP < 20 ? "MP" : sr.spP < 40 ? "SP" : null;
             if (reason) {
-              retryOrAlert("SPARK LOST", "Spark gone & " + reason + " too low!");
-              return;
+              if (!retryOrAlert("SPARK LOST", "Spark gone & " + reason + " too low!")) return;
+            } else {
+              if (!retryOrAlert("SPARK LOST", "Spark not recovered after replenish")) return;
             }
-
-            retryOrAlert("SPARK LOST", "Spark not recovered after replenish");
-            return;
           }
         }
 
