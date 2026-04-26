@@ -95,7 +95,10 @@ async function openWorldTab(world, url) {
   }
   if (tab) {
     if (tab.url === url) {
-      await chrome.tabs.reload(tab.id);
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => location.replace(location.href),
+      });
     } else {
       await chrome.tabs.update(tab.id, { url });
     }
