@@ -266,8 +266,10 @@ async function repairWithAutoBuy(world) {
 
     const repair = await postRepairAll(world);
     if (!repair.success) return { success: false, error: "post: " + repair.error, cost: scrape.cost, purchases };
-    if (repair.stillNeedsRepair) {
-      return { success: false, error: "repair_all rejected after buy (form still shown)", cost: scrape.cost, purchases };
+
+    const verify = await fetchRepairPage(world);
+    if (verify.success && verify.hasRepairAllForm) {
+      return { success: false, error: "still needs repair after POST (verified via filter=equipped GET)", cost: scrape.cost, purchases };
     }
 
     return { success: true, repaired: true, cost: scrape.cost, inventory: invResult.inventory, purchases };
