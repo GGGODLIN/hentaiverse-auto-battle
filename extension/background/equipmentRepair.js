@@ -86,7 +86,7 @@ const MATERIAL_NAMES = {
   sw: "Scrap Wood",
   sc: "Scrap Cloth",
   sl: "Scrap Leather",
-  ed: "Energy Drink",
+  ed: "Energy Cell",
 };
 
 async function fetchMaterialInventory(world) {
@@ -151,7 +151,7 @@ async function scrapeRepairCost(tabId) {
             sw: /(\d+)\s*x?\s*(?:Scrap\s*Wood|木材废料|木材廢料)/i,
             sc: /(\d+)\s*x?\s*(?:Scrap\s*Cloth|布制废料|布製廢料)/i,
             sl: /(\d+)\s*x?\s*(?:Scrap\s*Leather|皮革废料|皮革廢料)/i,
-            ed: /(\d+)\s*x?\s*(?:Energy\s*Drink|能量元|能量飲料)/i,
+            ed: /(\d+)\s*x?\s*(?:Energy\s*Cell|Energy\s*Drink|能量元|能量飲料)/i,
           };
           const cost = {};
           for (const [k, re] of Object.entries(patterns)) {
@@ -201,9 +201,26 @@ function waitForTabComplete(tabId, timeoutMs) {
 
 const REPAIR_DEPOSIT_BUFFER = 10000;
 
+async function buyFromShop(world, materialId, count) {
+  if (typeof fetchStoretoken !== "function" || typeof shopBuy !== "function") {
+    return { success: false, error: "shop fallback unavailable (replenish module not loaded)" };
+  }
+  const tokenRes = await fetchStoretoken(world);
+  if (!tokenRes.success) return { success: false, error: "shop storetoken: " + tokenRes.error };
+  const buyRes = await shopBuy(materialId, count, tokenRes.value, world);
+  if (!buyRes.success) return { success: false, error: "shop buy: " + buyRes.error };
+  return { success: true, units: count, source: "shop", cost: null, pricePerUnit: null };
+}
+
 async function buyMaterial(world, materialId, count) {
   const detail = await fetchMarketDetail(materialId, world);
-  if (!detail.success) return { success: false, error: detail.error };
+  if (!detail.success) {
+    if (detail.error?.includes("lowest ask price")) {
+      console.log("[repair] buyMaterial bazaar empty for " + materialId + ", falling back to shop");
+      return await buyFromShop(world, materialId, count);
+    }
+    return { success: false, error: detail.error };
+  }
 
   const totalCost = count * detail.lowestAsk;
   let currentDetail = detail;
@@ -297,8 +314,6 @@ function isekaiRepairUrl(filter) {
   return "https://hentaiverse.org/isekai/?s=Bazaar&ss=am&screen=repair&filter=" + (filter ?? "equipped");
 }
 
-const ISEKAI_TOPUP_THRESHOLDS = { sm: 50, sw: 50, sc: 50, sl: 50, ed: 30 };
-
 function parseIsekaiRepairPage(text) {
   const tokenMatch = text.match(/<input[^>]*name="postoken"[^>]*value="([^"]+)"/i);
   const tokenMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="postoken"/i);
@@ -362,58 +377,100 @@ async function postIsekaiRepair(postoken, eqids) {
   }
 }
 
-async function topUpMaterialsIsekai(world, currentInv) {
-  const purchases = [];
-  for (const [key, threshold] of Object.entries(ISEKAI_TOPUP_THRESHOLDS)) {
-    const have = currentInv[key] ?? 0;
-    if (have >= threshold) continue;
-    const deficit = threshold - have;
-    const buyRes = await buyMaterial(world, MATERIAL_IDS[key], deficit);
-    purchases.push({ key, itemid: MATERIAL_IDS[key], deficit, ...buyRes });
-    if (!buyRes.success) {
-      return { success: false, error: "buy " + MATERIAL_NAMES[key] + " failed: " + buyRes.error, purchases };
-    }
+async function scrapeIsekaiEqitems() {
+  const tab = await chrome.tabs.create({ url: isekaiRepairUrl("equipped"), active: false });
+  const tabId = tab.id;
+  try {
+    try { await waitForTabComplete(tabId, 12000); }
+    catch (e) { return { error: "page load: " + e.message }; }
+    await new Promise((r) => setTimeout(r, 400));
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: async () => {
+        for (let i = 0; i < 30; i++) {
+          const tokenInput = document.querySelector('input[name="postoken"]');
+          const postoken = tokenInput ? tokenInput.value : null;
+          const eqitemsObj = (typeof eqitems !== 'undefined' && eqitems) ? eqitems : null;
+          if (postoken && eqitemsObj && Object.keys(eqitemsObj).length > 0) {
+            const items = [];
+            const eqitemsOut = {};
+            for (const eqid of Object.keys(eqitemsObj)) {
+              const data = eqitemsObj[eqid];
+              if (data && data.m) eqitemsOut[eqid] = { m: data.m, t: data.t };
+            }
+            for (const cb of document.querySelectorAll('input[name="eqids[]"]')) {
+              const eqid = cb.value;
+              const row = cb.closest('tr');
+              const pctMatch = row?.textContent?.match(/(\d{1,3})\s*%/);
+              const pct = pctMatch ? parseInt(pctMatch[1], 10) : null;
+              if (pct != null) items.push({ eqid, pct, disabled: !!cb.disabled });
+            }
+            return { postoken, eqitems: eqitemsOut, items };
+          }
+          await new Promise((rs) => setTimeout(rs, 200));
+        }
+        return { error: "eqitems/postoken not populated within timeout" };
+      },
+    });
+    return results?.[0]?.result ?? { error: "executeScript returned no result" };
+  } catch (err) {
+    return { error: err.message };
+  } finally {
+    try { await chrome.tabs.remove(tabId); } catch {}
   }
-  return { success: true, purchases };
 }
 
 async function repairWithAutoBuyIsekai(world) {
-  const initial = await fetchIsekaiRepairPage();
-  if (!initial.success) return { success: false, error: initial.error };
+  const scrape = await scrapeIsekaiEqitems();
+  if (scrape.error) return { success: false, error: "scrape: " + scrape.error };
+  if (!scrape.postoken) return { success: false, error: "scrape: postoken missing" };
 
-  const eqidsToRepair = initial.items.filter((it) => it.pct < 100).map((it) => it.eqid);
-  if (eqidsToRepair.length === 0) {
+  const stillBad = scrape.items.filter((it) => !it.disabled && it.pct < 100);
+  if (stillBad.length === 0) {
     return { success: true, repaired: false, reason: "no repair needed" };
   }
+  const eqidsToRepair = stillBad.map((it) => it.eqid);
 
-  const post1 = await postIsekaiRepair(initial.postoken, eqidsToRepair);
-  if (!post1.success) return { success: false, error: "post1: " + post1.error };
-
-  const verify1 = await fetchIsekaiRepairPage();
-  if (!verify1.success) return { success: false, error: "verify1: " + verify1.error };
-  const stillBad1 = verify1.items.filter((it) => it.pct < 100);
-  if (stillBad1.length === 0) {
-    return { success: true, repaired: true, eqidsRepaired: eqidsToRepair, purchases: [] };
+  const totalNeed = {};
+  for (const eqid of eqidsToRepair) {
+    const data = scrape.eqitems[eqid];
+    if (!data || !data.m) return { success: false, error: "missing eqitems for " + eqid };
+    for (const [matId, count] of Object.entries(data.m)) {
+      totalNeed[matId] = (totalNeed[matId] ?? 0) + count;
+    }
   }
+  console.log("[repair] isekai precise need: " + JSON.stringify(totalNeed));
 
   const invResult = await fetchMaterialInventory(world);
   if (!invResult.success) return { success: false, error: "inventory: " + invResult.error };
 
-  const topup = await topUpMaterialsIsekai(world, invResult.inventory);
-  if (!topup.success) return { success: false, error: topup.error, purchases: topup.purchases };
-
-  const eqidsRound2 = stillBad1.map((it) => it.eqid);
-  const post2 = await postIsekaiRepair(verify1.postoken, eqidsRound2);
-  if (!post2.success) return { success: false, error: "post2: " + post2.error, purchases: topup.purchases };
-
-  const verify2 = await fetchIsekaiRepairPage();
-  if (!verify2.success) return { success: false, error: "verify2: " + verify2.error, purchases: topup.purchases };
-  const stillBad2 = verify2.items.filter((it) => it.pct < 100);
-  if (stillBad2.length > 0) {
-    return { success: false, error: "still needs repair after topup+POST: " + stillBad2.map((i) => i.eqid + "@" + i.pct + "%").join(","), purchases: topup.purchases };
+  const purchases = [];
+  const matIdToKey = Object.fromEntries(Object.entries(MATERIAL_IDS).map(([k, v]) => [v, k]));
+  for (const [matId, need] of Object.entries(totalNeed)) {
+    const key = matIdToKey[matId];
+    const have = key ? (invResult.inventory[key] ?? 0) : 0;
+    if (need <= have) continue;
+    const deficit = need - have;
+    const buyRes = await buyMaterial(world, matId, deficit);
+    purchases.push({ matId, key: key ?? null, need, have, deficit, ...buyRes });
+    if (!buyRes.success) {
+      const label = key ? MATERIAL_NAMES[key] : matId;
+      return { success: false, error: "buy " + label + " failed: " + buyRes.error, purchases };
+    }
   }
 
-  return { success: true, repaired: true, eqidsRepaired: eqidsToRepair, purchases: topup.purchases };
+  const post = await postIsekaiRepair(scrape.postoken, eqidsToRepair);
+  if (!post.success) return { success: false, error: "post: " + post.error, purchases };
+
+  const verify = await fetchIsekaiRepairPage();
+  if (!verify.success) return { success: false, error: "verify: " + verify.error, purchases };
+  const stillBadAfter = verify.items.filter((it) => it.pct < 100);
+  if (stillBadAfter.length > 0) {
+    return { success: false, error: "still needs repair after POST: " + stillBadAfter.map((i) => i.eqid + "@" + i.pct + "%").join(","), purchases };
+  }
+
+  return { success: true, repaired: true, eqidsRepaired: eqidsToRepair, purchases };
 }
 
 async function repairOnce(world) {

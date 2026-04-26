@@ -130,9 +130,12 @@ async function fetchMarketDetail(itemId, world) {
     }
 
     let lowestAsk = null;
-    const askAnchorMatch = text.match(/(Available\s+Sell\s+Orders|当前卖单)([\s\S]+?)(Available\s+Buy|当前买单|Order\s+Total|Min\s+Overbid)/i);
-    if (askAnchorMatch) {
-      const askSection = askAnchorMatch[2];
+    const sellAnchors = [...text.matchAll(/Sell\s+Orders|当前卖单|已投放卖单/gi)];
+    const startIdx = sellAnchors.length > 0 ? sellAnchors[sellAnchors.length - 1].index : -1;
+    if (startIdx >= 0) {
+      const tail = text.slice(startIdx);
+      const endMatch = tail.match(/Buy\s+Orders|当前买单|已投放买单|Order\s+Total|Min\s+Overbid|最低减价/i);
+      const askSection = endMatch ? tail.slice(0, endMatch.index) : tail;
       const trMatches = [...askSection.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
       for (const trM of trMatches) {
         const tdMatches = [...trM[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
@@ -455,3 +458,5 @@ async function replenishPreflight(world) {
 globalThis.replenishDryRun = dryRun;
 globalThis.replenishOnce = replenishOnce;
 globalThis.replenishPreflight = replenishPreflight;
+globalThis.shopBuy = shopBuy;
+globalThis.fetchStoretoken = fetchStoretoken;
