@@ -16,7 +16,10 @@ function getGameDay() {
   const now = new Date();
   const d = new Date(now);
   if (d.getHours() < RESET_HOUR) d.setDate(d.getDate() - 1);
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
 }
 
 async function getState(key, defaultValue) {
@@ -54,10 +57,12 @@ async function checkDailyReset() {
     });
     await setState("battleLog", []);
     await setState("riddleMasterRemaining", null);
+    await setState("riddleMasterLastSolve", null);
     await setState(wk("rbStateToday", "normal"), { day: today, fsmDone: false, trioDone: false });
     await setState(wk("rbStateToday", "isekai"), { day: today, fsmDone: false, trioDone: false });
     await addLog({ type: "system", reason: "Daily reset (" + today + ")" });
     console.log("[SW] Daily reset for " + today);
+    scheduleEncounterCheck();
   }
 }
 
@@ -123,6 +128,7 @@ async function handleArenaPageReady(msg, senderTabId) {
     await addLog({ type: "system", reason: "[" + world + "] Stamina " + stamina + " below threshold " + threshold + ", pausing" });
     await setState(wk("arenaSweepEnabled", world), false);
     await setState(wk("autoArena", world), false);
+
     chrome.notifications.create({
       type: "basic",
       title: "HV Auto Arena (" + world + ")",
@@ -265,6 +271,7 @@ async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
     await addLog({ type: "system", reason: "[" + world + "] No arena difficulties available" });
     await setState(wk("arenaSweepEnabled", world), false);
     await setState(wk("autoArena", world), false);
+
     return;
   }
   if (!nextDiff) {
@@ -272,6 +279,7 @@ async function pickAndEnterNextDifficulty(difficulties, tabId, world) {
     await addLog({ type: "victory", reason: "[" + world + "] All arena difficulties completed!" });
     await setState(wk("arenaSweepEnabled", world), false);
     await setState(wk("autoArena", world), false);
+
     chrome.notifications.create({
       type: "basic",
       title: "HV Auto Arena (" + world + ")",
@@ -315,6 +323,8 @@ async function handleBattleComplete(msg) {
     const sweepEnabled = await getState(wk("arenaSweepEnabled", "normal"), false);
     if (sweepEnabled) {
       await resumeArenaSweep("normal");
+    } else {
+      scheduleEncounterCheck();
     }
     return;
   }
@@ -335,7 +345,11 @@ async function handleBattleComplete(msg) {
     return;
   }
 
-  if (battleType === "arena") {
+  const sweepRunning = await getState(wk("arenaSweepEnabled", world), false);
+  const effectiveType = battleType ?? (sweepRunning ? "arena" : undefined);
+  console.log("[SW] handleBattleComplete: world=" + world + " result=" + result + " battleType=" + battleType + " effectiveType=" + effectiveType);
+
+  if (effectiveType === "arena" || sweepRunning) {
     const progress = await getState(wk("arenaSweepProgress", world), {});
 
     if (result === "victory") {
@@ -352,8 +366,7 @@ async function handleBattleComplete(msg) {
     await setState(wk("arenaSweepProgress", world), progress);
     await setState(wk("currentArenaDifficulty", world), null);
 
-    const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
-    if (!sweepEnabled) return;
+    if (!sweepRunning) return;
 
     const allDiffs = await getState(wk("arenaDifficulties", world), []);
     const allDone = allDiffs.length > 0 && allDiffs.every((d) => {
@@ -366,6 +379,7 @@ async function handleBattleComplete(msg) {
       await addLog({ type: "victory", reason: "[" + world + "] All arena difficulties completed!" });
       await setState(wk("arenaSweepEnabled", world), false);
       await setState(wk("autoArena", world), false);
+  
       chrome.notifications.create({
         type: "basic",
         title: "HV Auto Arena (" + world + ")",
@@ -376,10 +390,8 @@ async function handleBattleComplete(msg) {
       return;
     }
 
-    if (sweepEnabled) {
-      await wait(2000);
-      await resumeArenaSweep(world);
-    }
+    await wait(2000);
+    await resumeArenaSweep(world);
   }
 }
 
@@ -392,10 +404,10 @@ async function handleEncounterFound(msg, senderTabId) {
   const { url } = msg;
   await addLog({ type: "system", reason: "Encounter found! Opening battle..." });
 
-  const tab = await chrome.tabs.create({ url, active: false });
-  await setState("encounterBattleTabId", tab.id);
   await setState(wk("battleContext", "normal"), { type: "encounter", world: "normal" });
   await setState(wk("autoArena", "normal"), true);
+  const tab = await chrome.tabs.create({ url, active: false });
+  await setState("encounterBattleTabId", tab.id);
 }
 
 async function handleNoEncounter() {
@@ -482,6 +494,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const results = await fetchAllTranslations();
           sendResponse({ results });
           return;
+        }
+
+        case "INJECT_TRANSLATIONS": {
+          if (senderTabId) await injectTranslations(senderTabId, msg.host ?? "");
+          break;
         }
 
         case "SET_ARENA_SWEEP": {
@@ -577,6 +594,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             return;
           }
 
+          await setState("riddleMasterLastSolve", Date.now());
           sendResponse({ data });
         } catch (e) {
           sendResponse({ error: e.message });
@@ -645,6 +663,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
     await doEncounterCheck();
   }
+  if (alarm.name === "unattendedWatch") {
+    await unattendedWatch();
+  }
   if (alarm.name === "dailyReset") {
     await checkDailyReset();
   }
@@ -653,6 +674,27 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
+async function unattendedWatch() {
+  const unattended = await getState("unattendedMode", false);
+  if (!unattended) return;
+
+  for (const world of ["normal", "isekai"]) {
+    const enabled = await getState(wk("arenaSweepEnabled", world), false);
+    const auto = await getState(wk("autoArena", world), false);
+    console.log("[SW] unattendedWatch " + world + ": enabled=" + enabled + " autoArena=" + auto);
+
+    if (!enabled) {
+      await setState(wk("arenaSweepEnabled", world), true);
+      await setState(wk("autoArena", world), true);
+      await addLog({ type: "system", reason: "[" + world + "] Unattended: force restarting sweep" });
+    } else if (!auto) {
+      await setState(wk("autoArena", world), true);
+    }
+    await resumeArenaSweep(world);
+  }
+}
+
+chrome.alarms.create("unattendedWatch", { periodInMinutes: 1 });
 chrome.alarms.create("dailyReset", { periodInMinutes: 5 });
 chrome.alarms.create(TRANSLATION_UPDATE_ALARM, { periodInMinutes: TRANSLATION_UPDATE_INTERVAL_MIN });
 
