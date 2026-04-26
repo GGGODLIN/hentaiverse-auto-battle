@@ -1,5 +1,20 @@
-const REPLENISH_MARKET_URL = "https://hentaiverse.org/?s=Bazaar&ss=mk&screen=browseitems&filter=co";
 const REPLENISH_DEPOSIT_FLOOR = 100000;
+
+function bazaarBaseUrl(world) {
+  return world === 'isekai' ? 'https://hentaiverse.org/isekai' : 'https://hentaiverse.org';
+}
+function bazaarMarketListUrl(world) {
+  return bazaarBaseUrl(world) + '/?s=Bazaar&ss=mk&screen=browseitems&filter=co';
+}
+function bazaarMarketDetailUrl(world, itemId) {
+  return bazaarMarketListUrl(world) + '&itemid=' + itemId;
+}
+function bazaarMarketRootUrl(world) {
+  return bazaarBaseUrl(world) + '/?s=Bazaar&ss=mk';
+}
+function bazaarShopUrl(world) {
+  return bazaarBaseUrl(world) + '/?s=Bazaar&ss=is';
+}
 
 const HV_FETCH_HEADERS = {
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -25,9 +40,9 @@ function parseInventoriesFromText(text) {
   return inventories;
 }
 
-async function dryRun() {
+async function dryRun(world) {
   try {
-    const res = await fetch(REPLENISH_MARKET_URL, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
+    const res = await fetch(bazaarMarketListUrl(world), { credentials: "include", headers: HV_FETCH_HEADERS, referrer: bazaarBaseUrl(world) + "/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -68,10 +83,10 @@ function packSizeFor(itemId) {
   return 1;
 }
 
-async function fetchMarketDetail(itemId) {
-  const url = REPLENISH_MARKET_URL + "&itemid=" + itemId;
+async function fetchMarketDetail(itemId, world) {
+  const url = bazaarMarketDetailUrl(world, itemId);
   try {
-    const res = await fetch(url, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
+    const res = await fetch(url, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: bazaarBaseUrl(world) + "/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -143,8 +158,8 @@ async function fetchMarketDetail(itemId) {
   }
 }
 
-async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValue) {
-  const url = REPLENISH_MARKET_URL + "&itemid=" + itemId;
+async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValue, world) {
+  const url = bazaarMarketDetailUrl(world, itemId);
   try {
     const body = new URLSearchParams({
       marketoken,
@@ -156,7 +171,7 @@ async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValu
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
-      referrer: "https://hentaiverse.org/",
+      referrer: bazaarBaseUrl(world) + "/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -174,8 +189,8 @@ async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValu
   }
 }
 
-async function deposit(amount, marketoken, depositSubmitValue) {
-  const url = "https://hentaiverse.org/?s=Bazaar&ss=mk";
+async function deposit(amount, marketoken, depositSubmitValue, world) {
+  const url = bazaarMarketRootUrl(world);
   try {
     const body = new URLSearchParams({
       marketoken,
@@ -186,7 +201,7 @@ async function deposit(amount, marketoken, depositSubmitValue) {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
-      referrer: "https://hentaiverse.org/",
+      referrer: bazaarBaseUrl(world) + "/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -204,11 +219,9 @@ async function deposit(amount, marketoken, depositSubmitValue) {
   }
 }
 
-const REPLENISH_SHOP_URL = "https://hentaiverse.org/?s=Bazaar&ss=is";
-
-async function fetchStoretoken() {
+async function fetchStoretoken(world) {
   try {
-    const res = await fetch(REPLENISH_SHOP_URL, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
+    const res = await fetch(bazaarShopUrl(world), { credentials: "include", headers: HV_FETCH_HEADERS, referrer: bazaarBaseUrl(world) + "/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -229,7 +242,7 @@ async function fetchStoretoken() {
   }
 }
 
-async function shopBuy(itemId, count, storetoken) {
+async function shopBuy(itemId, count, storetoken, world) {
   try {
     const body = new URLSearchParams({
       storetoken,
@@ -237,11 +250,11 @@ async function shopBuy(itemId, count, storetoken) {
       select_item: itemId,
       select_count: String(count),
     });
-    const res = await fetch(REPLENISH_SHOP_URL, {
+    const res = await fetch(bazaarShopUrl(world), {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
-      referrer: "https://hentaiverse.org/",
+      referrer: bazaarBaseUrl(world) + "/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -279,8 +292,8 @@ function formatHHMMSS(ts) {
   return hh + ':' + mm + ':' + ss;
 }
 
-async function replenishOnce(replenishConfig) {
-  const dryResult = await dryRun();
+async function replenishOnce(replenishConfig, world) {
+  const dryResult = await dryRun(world);
   if (!dryResult.success) return dryResult;
 
   const { inventories } = dryResult;
@@ -302,7 +315,7 @@ async function replenishOnce(replenishConfig) {
     let marketCost = 0;
     let marketError = null;
 
-    const detail = await fetchMarketDetail(itemId);
+    const detail = await fetchMarketDetail(itemId, world);
     if (!detail.success) {
       marketError = detail.error;
     } else {
@@ -316,12 +329,12 @@ async function replenishOnce(replenishConfig) {
           if (depositAmount > currentDetail.accountBalance) {
             marketError = 'insufficient account balance to deposit (need ' + depositAmount + ', have ' + currentDetail.accountBalance + ')';
           } else {
-            const depositRes = await deposit(depositAmount, currentDetail.marketoken, currentDetail.accountDepositSubmitValue);
+            const depositRes = await deposit(depositAmount, currentDetail.marketoken, currentDetail.accountDepositSubmitValue, world);
             if (!depositRes.success) {
               marketError = 'deposit failed: ' + depositRes.error;
             } else {
               console.log("[replenish] deposited " + JSON.stringify(depositAmount) + " for item " + JSON.stringify(itemId));
-              const refresh = await fetchMarketDetail(itemId);
+              const refresh = await fetchMarketDetail(itemId, world);
               if (!refresh.success) {
                 marketError = 'refresh-after-deposit: ' + refresh.error;
               } else {
@@ -333,7 +346,7 @@ async function replenishOnce(replenishConfig) {
       }
 
       if (!marketError) {
-        const orderRes = await placeBuyOrder(itemId, packsNeeded, currentDetail.lowestAsk, currentDetail.marketoken, currentDetail.submitValue);
+        const orderRes = await placeBuyOrder(itemId, packsNeeded, currentDetail.lowestAsk, currentDetail.marketoken, currentDetail.submitValue, world);
         if (!orderRes.success) {
           marketError = orderRes.error;
         } else {
@@ -351,13 +364,13 @@ async function replenishOnce(replenishConfig) {
       continue;
     }
 
-    const storetokenRes = await fetchStoretoken();
+    const storetokenRes = await fetchStoretoken(world);
     if (!storetokenRes.success) {
       results.push({ id: itemId, status: 'failed', reason: 'shop fallback: ' + storetokenRes.error, marketError });
       continue;
     }
 
-    const shopRes = await shopBuy(itemId, remaining, storetokenRes.value);
+    const shopRes = await shopBuy(itemId, remaining, storetokenRes.value, world);
     if (!shopRes.success) {
       if (marketUnits > 0) {
         results.push({ id: itemId, status: 'partial', source: 'mixed', marketUnits, shopError: shopRes.error });
@@ -381,9 +394,13 @@ async function replenishOnce(replenishConfig) {
     : 'success';
 
   const ts = Date.now();
+  const invKey = 'replenishLastInventory_' + world;
+  await chrome.storage.local.set({ [invKey]: { ts, inventories } });
+
   const logEntry = {
     ts,
     time: formatHHMMSS(ts),
+    world,
     totalCost,
     items: results,
     overall,
@@ -414,9 +431,9 @@ async function replenishPreflight(world) {
   if (!enabled) return { skip: true };
 
   const config = stored.replenishConfig ?? {};
-  await replenishOnce(config);
+  await replenishOnce(config, world);
 
-  const verify = await dryRun();
+  const verify = await dryRun(world);
   if (!verify.success) return markAbort(world, verify.error, []);
 
   const shortfalls = [];

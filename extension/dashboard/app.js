@@ -595,25 +595,35 @@ function renderReplenishConfig() {
     list.appendChild(row);
   }
 
-  renderReplenishStatus(state.replenishLastInventory?.inventories ?? {});
+  renderReplenishStatus(
+    state.replenishLastInventory_normal?.inventories ?? {},
+    state.replenishLastInventory_isekai?.inventories ?? {},
+  );
 }
 
-function renderReplenishStatus(inventories) {
+function renderReplenishStatus(normalInv, isekaiInv) {
   const config = getReplenishConfig();
   for (const item of REPLENISH_ITEMS) {
     const row = document.querySelector('#replenishList [data-item-id="' + item.id + '"]');
     if (!row) continue;
     const invSpan = row.querySelector('.replenish-inv');
     if (!invSpan) continue;
-    const count = inventories[item.id];
-    if (count == null) {
+    const nCount = normalInv[item.id];
+    const iCount = isekaiInv[item.id];
+    if (nCount == null && iCount == null) {
       invSpan.textContent = '';
       invSpan.style.color = '';
       continue;
     }
     const low = (config[item.id] ?? DEFAULT_REPLENISH_CONFIG[item.id]).low;
-    invSpan.textContent = count;
-    invSpan.style.color = count < low ? '#EF5350' : '#66BB6A';
+    const nStr = nCount != null ? String(nCount) : '?';
+    const iStr = iCount != null ? String(iCount) : '?';
+    const nLow = nCount != null && nCount < low;
+    const iLow = iCount != null && iCount < low;
+    invSpan.innerHTML =
+      '<span style="color:' + (nLow ? '#EF5350' : '#66BB6A') + '">N:' + nStr + '</span>' +
+      ' / ' +
+      '<span style="color:' + (iLow ? '#EF5350' : '#66BB6A') + '">I:' + iStr + '</span>';
   }
 }
 
@@ -645,13 +655,14 @@ function renderReplenishLog() {
     const boughtCount = boughtItems.length;
     const totalItems = (entry.items ?? []).filter((r) => r.status !== 'skipped').length;
     const costStr = (entry.totalCost ?? 0).toLocaleString();
+    const worldBadge = entry.world === 'normal' ? '[N]' : entry.world === 'isekai' ? '[I]' : '[?]';
 
     const row = document.createElement('div');
     row.className = 'replenish-log-row';
 
     const summary = document.createElement('div');
     summary.className = 'replenish-log-summary';
-    summary.textContent = icon + ' ' + entry.time + '  補貨 ' + boughtCount + '/' + totalItems + '，總成本 ' + costStr + ' C';
+    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  補貨 ' + boughtCount + '/' + totalItems + '，總成本 ' + costStr + ' C';
     row.appendChild(summary);
 
     const detail = document.createElement('div');
@@ -838,31 +849,33 @@ document.getElementById('btnReplenish').addEventListener('click', async () => {
   statusEl.style.color = '#aaa';
   statusEl.textContent = '補貨中…';
   try {
-    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_RUN', replenishConfig: getReplenishConfig() });
-    if (resp?.success) {
-      const { results, totalCost } = resp;
+    const resp = await chrome.runtime.sendMessage({ type: 'REPLENISH_RUN' });
+    const worldResults = [
+      { label: 'N', data: resp?.normal },
+      { label: 'I', data: resp?.isekai },
+    ];
+    const lines = [];
+    let anyFailed = false;
+    for (const { label, data } of worldResults) {
+      if (!data) continue;
+      if (!data.success) {
+        anyFailed = true;
+        lines.push('[' + label + '] 錯誤: ' + (data.error ?? '未知錯誤'));
+        continue;
+      }
+      const { results, totalCost } = data;
       const bought = results.filter((r) => r.status === 'bought');
       const failed = results.filter((r) => r.status === 'failed');
       const skipped = results.filter((r) => r.status === 'skipped');
-      const lines = [];
-      for (const r of bought) {
-        const itemDef = REPLENISH_ITEMS.find((i) => i.id === r.id);
-        const name = itemDef?.name ?? r.id;
-        lines.push('✅ ' + name + ' ×' + r.unitsBought + ' (' + r.cost.toLocaleString() + ' C)');
-      }
-      for (const r of failed) {
-        const itemDef = REPLENISH_ITEMS.find((i) => i.id === r.id);
-        const name = itemDef?.name ?? r.id;
-        lines.push('❌ ' + name + ': ' + r.reason);
-      }
-      if (skipped.length > 0) lines.push('⏭ ' + skipped.length + ' 項已足夠');
-      if (bought.length > 0) lines.push('總計: ' + totalCost.toLocaleString() + ' C');
-      statusEl.style.color = failed.length > 0 ? '#EF5350' : '#66BB6A';
-      statusEl.textContent = lines.join(' | ');
-    } else {
-      statusEl.style.color = '#EF5350';
-      statusEl.textContent = '錯誤: ' + (resp?.error ?? '未知錯誤');
+      if (failed.length > 0) anyFailed = true;
+      if (bought.length > 0) lines.push('[' + label + '] 補 ' + bought.length + ' 項 ' + (totalCost ?? 0).toLocaleString() + ' C');
+      else if (skipped.length > 0) lines.push('[' + label + '] 足夠');
     }
+    statusEl.style.color = anyFailed ? '#EF5350' : '#66BB6A';
+    statusEl.textContent = lines.join(' | ') || '完成';
+    await loadState();
+    renderReplenishConfig();
+    renderReplenishLog();
   } catch (e) {
     statusEl.style.color = '#EF5350';
     statusEl.textContent = '錯誤: ' + e.message;

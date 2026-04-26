@@ -582,14 +582,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       case "REPLENISH_DRY_RUN": {
-        const result = await replenishDryRun();
+        const result = await replenishDryRun(msg.world ?? 'normal');
         sendResponse(result);
         return;
       }
 
       case "REPLENISH_RUN": {
-        const runResult = await replenishOnce(msg.replenishConfig);
-        sendResponse(runResult);
+        const stored = await chrome.storage.local.get('replenishConfig');
+        const config = stored.replenishConfig ?? {};
+        if (msg.world) {
+          const runResult = await replenishOnce(config, msg.world);
+          sendResponse(runResult);
+        } else {
+          const normalResult = await replenishOnce(config, 'normal');
+          const isekaiResult = await replenishOnce(config, 'isekai');
+          sendResponse({ normal: normalResult, isekai: isekaiResult });
+        }
         return;
       }
 
