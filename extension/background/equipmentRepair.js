@@ -391,8 +391,8 @@ async function scrapeIsekaiEqitems() {
         for (let i = 0; i < 30; i++) {
           const tokenInput = document.querySelector('input[name="postoken"]');
           const postoken = tokenInput ? tokenInput.value : null;
-          const eqitemsObj = (typeof eqitems !== 'undefined' && eqitems) ? eqitems : null;
-          if (postoken && eqitemsObj && Object.keys(eqitemsObj).length > 0) {
+          if (postoken) {
+            const eqitemsObj = (typeof eqitems !== 'undefined' && eqitems) ? eqitems : {};
             const items = [];
             const eqitemsOut = {};
             for (const eqid of Object.keys(eqitemsObj)) {
@@ -410,7 +410,7 @@ async function scrapeIsekaiEqitems() {
           }
           await new Promise((rs) => setTimeout(rs, 200));
         }
-        return { error: "eqitems/postoken not populated within timeout" };
+        return { error: "postoken not populated within timeout" };
       },
     });
     return results?.[0]?.result ?? { error: "executeScript returned no result" };
