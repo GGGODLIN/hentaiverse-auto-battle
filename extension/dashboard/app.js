@@ -657,12 +657,33 @@ function renderReplenishLog() {
     const costStr = (entry.totalCost ?? 0).toLocaleString();
     const worldBadge = entry.world === 'normal' ? '[N]' : entry.world === 'isekai' ? '[I]' : '[?]';
 
+    let marketUnits = 0;
+    let shopUnits = 0;
+    let marketCost = 0;
+    for (const item of (entry.items ?? [])) {
+      if (item.status !== 'bought' && item.status !== 'partial') continue;
+      if (item.source === 'market') {
+        marketUnits += item.units ?? 0;
+        marketCost += item.cost ?? 0;
+      } else if (item.source === 'shop') {
+        shopUnits += item.units ?? 0;
+      } else if (item.source === 'mixed') {
+        marketUnits += item.marketUnits ?? 0;
+        shopUnits += item.shopUnits ?? 0;
+        marketCost += item.marketCost ?? 0;
+      }
+    }
+    const sourceParts = [];
+    if (marketUnits > 0) sourceParts.push('市場 ' + marketUnits + ' 件 ' + marketCost.toLocaleString() + ' C');
+    if (shopUnits > 0) sourceParts.push('商店 ' + shopUnits + ' 件');
+    const sourceStr = sourceParts.length ? '（' + sourceParts.join(' + ') + '）' : '';
+
     const row = document.createElement('div');
     row.className = 'replenish-log-row';
 
     const summary = document.createElement('div');
     summary.className = 'replenish-log-summary';
-    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  補貨 ' + boughtCount + '/' + totalItems + '，總成本 ' + costStr + ' C';
+    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  補貨 ' + boughtCount + '/' + totalItems + '，總成本 ' + costStr + ' C' + sourceStr;
     row.appendChild(summary);
 
     const detail = document.createElement('div');
