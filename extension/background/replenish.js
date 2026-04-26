@@ -3,14 +3,17 @@ const REPLENISH_DEPOSIT_FLOOR = 100000;
 
 const RESTORATIVE_IDS = ['11191', '11195', '11199', '11291', '11295', '11299', '11391', '11395', '11399'];
 
-function parseInventories(doc) {
+function parseInventoriesFromText(text) {
   const inventories = {};
   for (const id of RESTORATIVE_IDS) {
-    const row = doc.querySelector('tr[onclick*="' + id + '"]');
-    if (!row) continue;
-    const cells = row.querySelectorAll('td');
-    if (cells.length < 2) continue;
-    const raw = parseInt((cells[1].textContent ?? '').replace(/,/g, ''), 10);
+    const trRe = new RegExp('<tr[^>]*onclick="[^"]*itemid=' + id + '[^"]*"[^>]*>([\\s\\S]*?)</tr>', 'i');
+    const trMatch = text.match(trRe);
+    if (!trMatch) continue;
+    const tdMatches = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+    if (tdMatches.length < 2) continue;
+    const invHtml = tdMatches[1][1];
+    const invText = invHtml.replace(/<[^>]*>/g, '').replace(/,/g, '').trim();
+    const raw = parseInt(invText, 10);
     if (Number.isNaN(raw)) continue;
     inventories[id] = raw;
   }
@@ -27,10 +30,7 @@ async function dryRun() {
       return { success: false, error: 'session expired (redirected to login)' };
     }
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
-
-    const inventories = parseInventories(doc);
+    const inventories = parseInventoriesFromText(text);
 
     if (Object.keys(inventories).length === 0) {
       return { success: false, error: 'parse: no items matched (HTML structure changed?)' };
@@ -64,76 +64,59 @@ async function fetchMarketDetail(itemId) {
       return { success: false, error: 'session expired (redirected to login)' };
     }
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
+    const marketokenMatch = text.match(/<input[^>]*name="marketoken"[^>]*value="([^"]+)"/i);
+    const marketokenMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="marketoken"/i);
+    const marketoken = marketokenMatch?.[1] ?? marketokenMatch2?.[1];
+    if (!marketoken) return { success: false, error: 'parse: marketoken input not found' };
 
-    const tokenInput = doc.querySelector('input[name="marketoken"]');
-    if (!tokenInput) return { success: false, error: 'parse: marketoken input not found' };
-    const marketoken = tokenInput.value;
+    const buyUpdateMatch = text.match(/<input[^>]*name="buyorder_update"[^>]*value="([^"]+)"/i);
+    const buyUpdateMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="buyorder_update"/i);
+    const submitValue = buyUpdateMatch?.[1] ?? buyUpdateMatch2?.[1];
+    if (!submitValue) return { success: false, error: 'parse: buyorder_update input not found' };
 
-    const submitInput = doc.querySelector('input[name="buyorder_update"]');
-    if (!submitInput) return { success: false, error: 'parse: buyorder_update input not found' };
-    const submitValue = submitInput.value;
+    const depositMatch = text.match(/<input[^>]*name="account_deposit"[^>]*value="([^"]+)"/i);
+    const depositMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="account_deposit"/i);
+    const accountDepositSubmitValue = depositMatch?.[1] ?? depositMatch2?.[1];
+    if (!accountDepositSubmitValue) return { success: false, error: 'parse: account_deposit input not found' };
 
-    const tables = doc.querySelectorAll('table');
+    const accountBalMatch = text.match(/Account\s*Balance[\s\S]{1,200}?([\d,]+)\s*C/i);
+    let accountBalance = accountBalMatch ? parseInt(accountBalMatch[1].replace(/,/g, ''), 10) : null;
+
+    const marketBalMatch = text.match(/Market\s*Balance[\s\S]{1,200}?([\d,]+)\s*C/i);
+    let marketBalance = marketBalMatch ? parseInt(marketBalMatch[1].replace(/,/g, ''), 10) : null;
+
+    if (marketBalance == null || accountBalance == null) {
+      const accountAmountFormMatch = text.match(/<input[^>]*name="account_amount"[^>]*>[\s\S]{0,2000}?<\/form>/i)
+        ?? text.match(/<form[\s\S]{0,2000}?<input[^>]*name="account_amount"[^>]*>[\s\S]{0,2000}?<\/form>/i);
+      if (accountAmountFormMatch) {
+        const formHtml = accountAmountFormMatch[0];
+        const nums = [...formHtml.matchAll(/([\d,]+)\s*C/g)]
+          .map((m) => parseInt(m[1].replace(/,/g, ''), 10))
+          .filter((n) => !Number.isNaN(n));
+        if (nums.length >= 2 && marketBalance == null) marketBalance = nums[0];
+        if (nums.length >= 2 && accountBalance == null) accountBalance = nums[1];
+        if (nums.length === 1 && marketBalance == null) marketBalance = nums[0];
+      }
+    }
+
     let lowestAsk = null;
-    for (const table of tables) {
-      const rows = table.querySelectorAll('tr');
-      for (const row of rows) {
-        const cells = row.querySelectorAll('td');
-        if (cells.length >= 2) {
-          const priceText = (cells[1].textContent ?? '').replace(/,/g, '').trim();
-          const price = parseInt(priceText, 10);
-          if (!Number.isNaN(price) && price > 0) {
-            lowestAsk = price;
-            break;
-          }
+    const askAnchorMatch = text.match(/(Available\s+Sell\s+Orders|当前卖单)([\s\S]+?)(Available\s+Buy|当前买单|Order\s+Total|Min\s+Overbid)/i);
+    if (askAnchorMatch) {
+      const askSection = askAnchorMatch[2];
+      const trMatches = [...askSection.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+      for (const trM of trMatches) {
+        const tdMatches = [...trM[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+        if (tdMatches.length < 3) continue;
+        const priceText = tdMatches[1][1].replace(/<[^>]*>/g, '').replace(/,/g, '').trim();
+        const price = parseInt(priceText, 10);
+        if (!Number.isNaN(price) && price > 0) {
+          lowestAsk = price;
+          break;
         }
       }
-      if (lowestAsk != null) break;
     }
 
     if (lowestAsk == null) return { success: false, error: 'parse: could not find lowest ask price in order book' };
-
-    const depositSubmitInput = doc.querySelector('input[name="account_deposit"]');
-    if (!depositSubmitInput) return { success: false, error: 'parse: account_deposit input not found' };
-    const accountDepositSubmitValue = depositSubmitInput.value;
-
-    const allText = doc.body?.textContent ?? '';
-    const balancePattern = /[\d]{1,3}(?:,\d{3})*/g;
-
-    let marketBalance = null;
-    let accountBalance = null;
-
-    const bodyHtml = doc.body?.innerHTML ?? '';
-    const mktMatch = bodyHtml.match(/[Mm]arket\s*[Bb]alance[^<]*?(\d[\d,]+)\s*C|余额[^<]*?(\d[\d,]+)\s*C|(\d[\d,]+)\s*C[^<]*?[Mm]arket|市場余额[^>]*?(\d[\d,]+)/);
-    if (mktMatch) {
-      const raw = (mktMatch[1] ?? mktMatch[2] ?? mktMatch[3] ?? mktMatch[4] ?? '').replace(/,/g, '');
-      const parsed = parseInt(raw, 10);
-      if (!Number.isNaN(parsed)) marketBalance = parsed;
-    }
-
-    const acctMatch = bodyHtml.match(/[Aa]ccount\s*[Bb]alance[^<]*?(\d[\d,]+)\s*C|帳戶余额[^<]*?(\d[\d,]+)\s*C|(\d[\d,]+)\s*C[^<]*?[Aa]ccount/);
-    if (acctMatch) {
-      const raw = (acctMatch[1] ?? acctMatch[2] ?? acctMatch[3] ?? '').replace(/,/g, '');
-      const parsed = parseInt(raw, 10);
-      if (!Number.isNaN(parsed)) accountBalance = parsed;
-    }
-
-    if (marketBalance == null || accountBalance == null) {
-      const accountAmountInput = doc.querySelector('input[name="account_amount"]');
-      if (accountAmountInput) {
-        const form = accountAmountInput.closest('form');
-        if (form) {
-          const formText = form.textContent ?? '';
-          const nums = [...formText.matchAll(/(\d[\d,]+)\s*C/g)].map((m) => parseInt(m[1].replace(/,/g, ''), 10)).filter((n) => !Number.isNaN(n));
-          if (nums.length >= 2 && marketBalance == null) marketBalance = nums[0];
-          if (nums.length >= 2 && accountBalance == null) accountBalance = nums[1];
-          if (nums.length === 1 && marketBalance == null) marketBalance = nums[0];
-        }
-      }
-    }
-
     if (marketBalance == null) return { success: false, error: 'parse: marketBalance not found' };
     if (accountBalance == null) return { success: false, error: 'parse: accountBalance not found' };
 
@@ -216,14 +199,13 @@ async function fetchStoretoken() {
       return { success: false, error: 'session expired (redirected to login)' };
     }
 
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, "text/html");
-
-    const tokenInput = doc.querySelector('input[name="storetoken"]');
-    if (!tokenInput) return { success: false, error: 'parse: storetoken input not found' };
+    const storetokenMatch = text.match(/<input[^>]*name="storetoken"[^>]*value="([^"]+)"/i);
+    const storetokenMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="storetoken"/i);
+    const storetokenValue = storetokenMatch?.[1] ?? storetokenMatch2?.[1];
+    if (!storetokenValue) return { success: false, error: 'parse: storetoken input not found' };
 
     console.log("[replenish] fetchStoretoken ok");
-    return { success: true, value: tokenInput.value };
+    return { success: true, value: storetokenValue };
   } catch (err) {
     console.log("[replenish] fetchStoretoken error: " + JSON.stringify(err.message));
     return { success: false, error: err.message };
