@@ -135,13 +135,16 @@ async function scrapeRepairCost(tabId) {
         function parse() {
           const repairForm = [...document.querySelectorAll("form")]
             .find((f) => [...f.elements].some((el) => el.name === "repair_all"));
-          if (!repairForm) return { needsRepair: false };
+          if (!repairForm) return { needsRepair: false, reason: "no repair_all form" };
           let costText = "";
           const parent = repairForm.parentElement;
           if (parent) {
             for (const child of parent.children) {
               if (child.tagName !== "FORM") costText += " " + (child.textContent || "");
             }
+          }
+          if (/已全部修[复復]|全部修[复復]|all\s+(?:items|equipment|tab).*?(?:repaired|fixed)|fully\s+repaired|no\s+repair\s+needed/i.test(costText)) {
+            return { needsRepair: false, reason: "all repaired message", costText };
           }
           const patterns = {
             sm: /(\d+)\s*x?\s*(?:Scrap\s*Metal|金属废料|金屬廢料)/i,
@@ -156,7 +159,8 @@ async function scrapeRepairCost(tabId) {
             cost[k] = mm ? parseInt(mm[1], 10) : 0;
           }
           const total = Object.values(cost).reduce((a, b) => a + b, 0);
-          return { needsRepair: true, cost, scraped: total > 0 };
+          if (total > 0) return { needsRepair: true, cost, scraped: true };
+          return { needsRepair: true, cost, scraped: false, costText };
         }
         for (let i = 0; i < 25; i++) {
           const r = parse();
@@ -267,9 +271,20 @@ async function repairWithAutoBuy(world) {
     const repair = await postRepairAll(world);
     if (!repair.success) return { success: false, error: "post: " + repair.error, cost: scrape.cost, purchases };
 
-    const verify = await fetchRepairPage(world);
-    if (verify.success && verify.hasRepairAllForm) {
-      return { success: false, error: "still needs repair after POST (verified via filter=equipped GET)", cost: scrape.cost, purchases };
+    try { await chrome.tabs.reload(tabId); } catch {}
+    try {
+      await waitForTabComplete(tabId, 12000);
+    } catch (e) {
+      console.log("[repair] verify reload timeout, treating POST as success: " + e.message);
+      return { success: true, repaired: true, cost: scrape.cost, inventory: invResult.inventory, purchases, verifyWarning: "reload timeout" };
+    }
+    await new Promise((r) => setTimeout(r, 400));
+    const verifyScrape = await scrapeRepairCost(tabId);
+    if (verifyScrape?.error) {
+      return { success: true, repaired: true, cost: scrape.cost, inventory: invResult.inventory, purchases, verifyWarning: verifyScrape.error };
+    }
+    if (verifyScrape?.needsRepair !== false) {
+      return { success: false, error: "still needs repair after POST (re-scraped)", cost: scrape.cost, verifyCost: verifyScrape?.cost, purchases };
     }
 
     return { success: true, repaired: true, cost: scrape.cost, inventory: invResult.inventory, purchases };
