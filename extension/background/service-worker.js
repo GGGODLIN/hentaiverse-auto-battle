@@ -185,10 +185,7 @@ async function handleRbPageReady(msg, senderTabId) {
       await addLog({ type: "system", reason: "[" + world + "] RoB: entering FSM (tokens=" + msg.tokens + ")" });
       await sendToTab(senderTabId, { type: "ENTER_RB", cost: 5, phase: "fsm" });
     } else {
-      state.fsmDone = true;
-      state.trioDone = true;
-      await setState(wk("rbStateToday", world), state);
-      await addLog({ type: "alert", reason: "[" + world + "] RoB: insufficient tokens for FSM (" + msg.tokens + "/5), skipping" });
+      await addLog({ type: "alert", reason: "[" + world + "] RoB: insufficient tokens for FSM (" + msg.tokens + "/5), waiting for refill" });
     }
     return;
   }
@@ -199,9 +196,7 @@ async function handleRbPageReady(msg, senderTabId) {
       await addLog({ type: "system", reason: "[" + world + "] RoB: entering Trio (tokens=" + msg.tokens + ")" });
       await sendToTab(senderTabId, { type: "ENTER_RB", cost: 10, phase: "trio" });
     } else {
-      state.trioDone = true;
-      await setState(wk("rbStateToday", world), state);
-      await addLog({ type: "system", reason: "[" + world + "] RoB: skipping Trio (tokens=" + msg.tokens + ", threshold>" + trioMin + ")" });
+      await addLog({ type: "system", reason: "[" + world + "] RoB: waiting for Trio tokens (" + msg.tokens + "/" + (trioMin + 1) + ")" });
     }
     return;
   }
