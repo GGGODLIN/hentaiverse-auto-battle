@@ -802,16 +802,34 @@ function renderRepairLog() {
     return;
   }
 
+  const MATERIAL_DISPLAY = {
+    sm: '金属废料', sw: '木材废料', sc: '布制废料', sl: '皮革废料', ed: '能量元',
+  };
+
   for (const entry of recent) {
     const icons = { repaired: '✅', skipped: '➖', partial: '⚠️', failed: '❌' };
     const icon = icons[entry.outcome] ?? '❓';
     const worldBadge = entry.world === 'normal' ? '[N]' : entry.world === 'isekai' ? '[I]' : '[?]';
-    const reasonStr = entry.reason ? '  ' + entry.reason : '';
+
+    const purchases = entry.purchases ?? [];
+    const totalCost = purchases.reduce((a, p) => a + (p.cost ?? 0), 0);
+    const buyParts = purchases
+      .filter((p) => p.success && p.units > 0)
+      .map((p) => (MATERIAL_DISPLAY[p.key] ?? p.key) + '×' + p.units);
+    const buyStr = buyParts.length ? '  買: ' + buyParts.join(', ') + ' (' + totalCost.toLocaleString() + ' C)' : '';
+
+    const costParts = entry.cost
+      ? Object.entries(entry.cost).filter(([, v]) => v > 0).map(([k, v]) => (MATERIAL_DISPLAY[k] ?? k) + '×' + v)
+      : [];
+    const costStr = costParts.length ? '  需求: ' + costParts.join(', ') : '';
+
+    const reasonStr = entry.reason && entry.outcome !== 'repaired' ? '  ' + entry.reason : '';
+
     const row = document.createElement('div');
     row.className = 'replenish-log-row';
     const summary = document.createElement('div');
     summary.className = 'replenish-log-summary';
-    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  ' + entry.outcome + reasonStr;
+    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  ' + entry.outcome + costStr + buyStr + reasonStr;
     row.appendChild(summary);
     container.appendChild(row);
   }
