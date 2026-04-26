@@ -237,7 +237,7 @@
       if (count < 2) {
         setStatus("reload", title + " (" + (count + 1) + "/3)");
         storeSet(wk("alertRetryCount"), count + 1);
-        location.reload();
+        location.replace(location.href);
         return true;
       }
       storeSet(wk("alertRetryCount"), 0);
