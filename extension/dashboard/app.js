@@ -823,13 +823,15 @@ function renderRepairLog() {
       : [];
     const costStr = costParts.length ? '  需求: ' + costParts.join(', ') : '';
 
+    const eqidsStr = entry.eqidsRepaired?.length ? '  修 ' + entry.eqidsRepaired.length + ' 件' : '';
+
     const reasonStr = entry.reason && entry.outcome !== 'repaired' ? '  ' + entry.reason : '';
 
     const row = document.createElement('div');
     row.className = 'replenish-log-row';
     const summary = document.createElement('div');
     summary.className = 'replenish-log-summary';
-    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  ' + entry.outcome + costStr + buyStr + reasonStr;
+    summary.textContent = worldBadge + ' ' + icon + ' ' + entry.time + '  ' + entry.outcome + costStr + eqidsStr + buyStr + reasonStr;
     row.appendChild(summary);
     container.appendChild(row);
   }

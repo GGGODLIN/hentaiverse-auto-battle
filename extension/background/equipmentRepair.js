@@ -293,8 +293,131 @@ async function repairWithAutoBuy(world) {
   }
 }
 
+function isekaiRepairUrl(filter) {
+  return "https://hentaiverse.org/isekai/?s=Bazaar&ss=am&screen=repair&filter=" + (filter ?? "equipped");
+}
+
+const ISEKAI_TOPUP_THRESHOLDS = { sm: 50, sw: 50, sc: 50, sl: 50, ed: 30 };
+
+function parseIsekaiRepairPage(text) {
+  const tokenMatch = text.match(/<input[^>]*name="postoken"[^>]*value="([^"]+)"/i);
+  const tokenMatch2 = text.match(/<input[^>]*value="([^"]+)"[^>]*name="postoken"/i);
+  const postoken = tokenMatch?.[1] ?? tokenMatch2?.[1];
+  const items = [];
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m;
+  while ((m = rowRe.exec(text)) !== null) {
+    const row = m[1];
+    const eqM = row.match(/name="eqids\[\]"[^>]*value="(\d+)"/);
+    if (!eqM) continue;
+    const pcM = row.match(/(\d{1,3})\s*%/);
+    if (!pcM) continue;
+    items.push({ eqid: eqM[1], pct: parseInt(pcM[1], 10) });
+  }
+  return { postoken, items };
+}
+
+async function fetchIsekaiRepairPage() {
+  try {
+    const res = await fetch(isekaiRepairUrl("equipped"), {
+      credentials: "include",
+      headers: REPAIR_FETCH_HEADERS,
+      referrer: "https://hentaiverse.org/isekai/",
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    if (res.url.includes("s=Login") || /name="UserName"/i.test(text)) {
+      return { success: false, error: "session expired (redirected to login)" };
+    }
+    const parsed = parseIsekaiRepairPage(text);
+    if (!parsed.postoken) return { success: false, error: "parse: postoken not found" };
+    return { success: true, postoken: parsed.postoken, items: parsed.items };
+  } catch (err) {
+    console.log("[repair] fetchIsekaiRepairPage error: " + JSON.stringify(err.message));
+    return { success: false, error: err.message };
+  }
+}
+
+async function postIsekaiRepair(postoken, eqids) {
+  try {
+    const params = new URLSearchParams();
+    params.append("postoken", postoken);
+    for (const id of eqids) params.append("eqids[]", id);
+    const res = await fetch(isekaiRepairUrl("equipped"), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...REPAIR_FETCH_HEADERS },
+      referrer: "https://hentaiverse.org/isekai/",
+      body: params.toString(),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    if (res.url.includes("s=Login") || /name="UserName"/i.test(text)) {
+      return { success: false, error: "session expired (redirected to login)" };
+    }
+    return { success: true, html: text };
+  } catch (err) {
+    console.log("[repair] postIsekaiRepair error: " + JSON.stringify(err.message));
+    return { success: false, error: err.message };
+  }
+}
+
+async function topUpMaterialsIsekai(world, currentInv) {
+  const purchases = [];
+  for (const [key, threshold] of Object.entries(ISEKAI_TOPUP_THRESHOLDS)) {
+    const have = currentInv[key] ?? 0;
+    if (have >= threshold) continue;
+    const deficit = threshold - have;
+    const buyRes = await buyMaterial(world, MATERIAL_IDS[key], deficit);
+    purchases.push({ key, itemid: MATERIAL_IDS[key], deficit, ...buyRes });
+    if (!buyRes.success) {
+      return { success: false, error: "buy " + MATERIAL_NAMES[key] + " failed: " + buyRes.error, purchases };
+    }
+  }
+  return { success: true, purchases };
+}
+
+async function repairWithAutoBuyIsekai(world) {
+  const initial = await fetchIsekaiRepairPage();
+  if (!initial.success) return { success: false, error: initial.error };
+
+  const eqidsToRepair = initial.items.filter((it) => it.pct < 100).map((it) => it.eqid);
+  if (eqidsToRepair.length === 0) {
+    return { success: true, repaired: false, reason: "no repair needed" };
+  }
+
+  const post1 = await postIsekaiRepair(initial.postoken, eqidsToRepair);
+  if (!post1.success) return { success: false, error: "post1: " + post1.error };
+
+  const verify1 = await fetchIsekaiRepairPage();
+  if (!verify1.success) return { success: false, error: "verify1: " + verify1.error };
+  const stillBad1 = verify1.items.filter((it) => it.pct < 100);
+  if (stillBad1.length === 0) {
+    return { success: true, repaired: true, eqidsRepaired: eqidsToRepair, purchases: [] };
+  }
+
+  const invResult = await fetchMaterialInventory(world);
+  if (!invResult.success) return { success: false, error: "inventory: " + invResult.error };
+
+  const topup = await topUpMaterialsIsekai(world, invResult.inventory);
+  if (!topup.success) return { success: false, error: topup.error, purchases: topup.purchases };
+
+  const eqidsRound2 = stillBad1.map((it) => it.eqid);
+  const post2 = await postIsekaiRepair(verify1.postoken, eqidsRound2);
+  if (!post2.success) return { success: false, error: "post2: " + post2.error, purchases: topup.purchases };
+
+  const verify2 = await fetchIsekaiRepairPage();
+  if (!verify2.success) return { success: false, error: "verify2: " + verify2.error, purchases: topup.purchases };
+  const stillBad2 = verify2.items.filter((it) => it.pct < 100);
+  if (stillBad2.length > 0) {
+    return { success: false, error: "still needs repair after topup+POST: " + stillBad2.map((i) => i.eqid + "@" + i.pct + "%").join(","), purchases: topup.purchases };
+  }
+
+  return { success: true, repaired: true, eqidsRepaired: eqidsToRepair, purchases: topup.purchases };
+}
+
 async function repairOnce(world) {
-  const result = await repairWithAutoBuy(world);
+  const result = world === "isekai" ? await repairWithAutoBuyIsekai(world) : await repairWithAutoBuy(world);
   const ts = Date.now();
 
   if (!result.success) {
@@ -308,9 +431,9 @@ async function repairOnce(world) {
     return { success: true, repaired: false, reason: result.reason };
   }
 
-  await appendRepairLog({ ts, time: formatHHMMSS(ts), world, outcome: "repaired", cost: result.cost, purchases: result.purchases });
-  console.log("[repair] repairOnce world=" + world + " ok cost=" + JSON.stringify(result.cost) + " purchases=" + JSON.stringify(result.purchases));
-  return { success: true, repaired: true, cost: result.cost, purchases: result.purchases };
+  await appendRepairLog({ ts, time: formatHHMMSS(ts), world, outcome: "repaired", cost: result.cost, purchases: result.purchases, eqidsRepaired: result.eqidsRepaired });
+  console.log("[repair] repairOnce world=" + world + " ok purchases=" + JSON.stringify(result.purchases));
+  return { success: true, repaired: true, cost: result.cost, purchases: result.purchases, eqidsRepaired: result.eqidsRepaired };
 }
 
 async function markRepairAbort(world, reason) {
