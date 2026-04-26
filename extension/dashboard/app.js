@@ -239,8 +239,14 @@ function renderStats() {
   if (isekaiStam != null) stamParts.push("I:" + isekaiStam);
   document.getElementById("statStamina").textContent = stamParts.length > 0 ? stamParts.join(" / ") : "--";
   const rmVal = state.riddleMasterRemaining;
+  const rmLastSolve = state.riddleMasterLastSolve;
   const rmEl = document.getElementById("statRiddle");
-  rmEl.textContent = rmVal ?? "--";
+  let rmText = rmVal ?? "--";
+  if (rmLastSolve) {
+    const d = new Date(rmLastSolve);
+    rmText += " (" + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + ")";
+  }
+  rmEl.textContent = rmText;
   rmEl.style.color = (rmVal != null && rmVal <= 3) ? "#EF5350" : "#fff";
 }
 
