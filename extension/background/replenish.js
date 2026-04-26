@@ -33,6 +33,11 @@ async function dryRun() {
     const inventories = parseInventoriesFromText(text);
 
     if (Object.keys(inventories).length === 0) {
+      console.log("[replenish] dryRun parse miss — text.length=" + text.length +
+        " hasItemid11195=" + text.includes('itemid=11195') +
+        " hasHealthPotion=" + text.includes('Health Potion') +
+        " finalUrl=" + JSON.stringify(res.url) +
+        " head=" + JSON.stringify(text.slice(0, 300)));
       return { success: false, error: 'parse: no items matched (HTML structure changed?)' };
     }
 
