@@ -1,6 +1,11 @@
 const REPLENISH_MARKET_URL = "https://hentaiverse.org/?s=Bazaar&ss=mk&screen=browseitems&filter=co";
 const REPLENISH_DEPOSIT_FLOOR = 100000;
 
+const HV_FETCH_HEADERS = {
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9,zh;q=0.8",
+};
+
 const RESTORATIVE_IDS = ['11191', '11195', '11199', '11291', '11295', '11299', '11391', '11395', '11399'];
 
 function parseInventoriesFromText(text) {
@@ -22,7 +27,7 @@ function parseInventoriesFromText(text) {
 
 async function dryRun() {
   try {
-    const res = await fetch(REPLENISH_MARKET_URL, { credentials: "include" });
+    const res = await fetch(REPLENISH_MARKET_URL, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -33,11 +38,16 @@ async function dryRun() {
     const inventories = parseInventoriesFromText(text);
 
     if (Object.keys(inventories).length === 0) {
+      const hpIdx = text.indexOf('Health Potion');
+      const hpSnippet = hpIdx >= 0 ? text.slice(Math.max(0, hpIdx - 80), hpIdx + 300) : null;
       console.log("[replenish] dryRun parse miss — text.length=" + text.length +
         " hasItemid11195=" + text.includes('itemid=11195') +
         " hasHealthPotion=" + text.includes('Health Potion') +
+        " hasSelectItem=" + text.includes('select_item') +
+        " hasOnclick=" + text.includes('onclick') +
         " finalUrl=" + JSON.stringify(res.url) +
-        " head=" + JSON.stringify(text.slice(0, 300)));
+        " head=" + JSON.stringify(text.slice(0, 300)) +
+        " hpSnippet=" + JSON.stringify(hpSnippet));
       return { success: false, error: 'parse: no items matched (HTML structure changed?)' };
     }
 
@@ -61,7 +71,7 @@ function packSizeFor(itemId) {
 async function fetchMarketDetail(itemId) {
   const url = REPLENISH_MARKET_URL + "&itemid=" + itemId;
   try {
-    const res = await fetch(url, { credentials: "include" });
+    const res = await fetch(url, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -145,7 +155,8 @@ async function placeBuyOrder(itemId, packs, pricePerPack, marketoken, submitValu
     const res = await fetch(url, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
+      referrer: "https://hentaiverse.org/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -174,7 +185,8 @@ async function deposit(amount, marketoken, depositSubmitValue) {
     const res = await fetch(url, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
+      referrer: "https://hentaiverse.org/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -196,7 +208,7 @@ const REPLENISH_SHOP_URL = "https://hentaiverse.org/?s=Bazaar&ss=is";
 
 async function fetchStoretoken() {
   try {
-    const res = await fetch(REPLENISH_SHOP_URL, { credentials: "include" });
+    const res = await fetch(REPLENISH_SHOP_URL, { credentials: "include", headers: HV_FETCH_HEADERS, referrer: "https://hentaiverse.org/" });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const text = await res.text();
 
@@ -228,7 +240,8 @@ async function shopBuy(itemId, count, storetoken) {
     const res = await fetch(REPLENISH_SHOP_URL, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", ...HV_FETCH_HEADERS },
+      referrer: "https://hentaiverse.org/",
       body: body.toString(),
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
