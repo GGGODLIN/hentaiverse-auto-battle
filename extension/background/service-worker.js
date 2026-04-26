@@ -114,10 +114,28 @@ async function openWorldTab(world, url) {
   return tab.id;
 }
 
+async function isEncounterBattleInFlight() {
+  const tabId = await getState("encounterBattleTabId", null);
+  if (!tabId) return false;
+  const startedAt = await getState("encounterBattleStartedAt", 0);
+  if (startedAt > 0 && Date.now() - startedAt > 10 * 60 * 1000) return false;
+  try {
+    const t = await chrome.tabs.get(tabId);
+    return !!(t && typeof t.url === "string" && t.url.includes("hentaiverse.org"));
+  } catch {
+    return false;
+  }
+}
+
 async function handleArenaPageReady(msg, senderTabId) {
   const world = msg.world ?? "normal";
   const sweepEnabled = await getState(wk("arenaSweepEnabled", world), false);
   if (!sweepEnabled) return;
+
+  if (world === "normal" && await isEncounterBattleInFlight()) {
+    console.log("[SW] handleArenaPageReady skip normal: encounter battle in flight");
+    return;
+  }
 
   const stamina = msg.stamina;
   const threshold = await getState("staminaThreshold", 10);
@@ -318,6 +336,7 @@ async function handleBattleComplete(msg) {
     if (battleTabId) {
       try { await chrome.tabs.remove(battleTabId); } catch {}
       await setState("encounterBattleTabId", null);
+      await setState("encounterBattleStartedAt", 0);
     }
 
     const sweepEnabled = await getState(wk("arenaSweepEnabled", "normal"), false);
@@ -408,6 +427,7 @@ async function handleEncounterFound(msg, senderTabId) {
   await setState(wk("autoArena", "normal"), true);
   const tab = await chrome.tabs.create({ url, active: false });
   await setState("encounterBattleTabId", tab.id);
+  await setState("encounterBattleStartedAt", Date.now());
 }
 
 async function handleNoEncounter() {
@@ -679,6 +699,11 @@ async function unattendedWatch() {
   if (!unattended) return;
 
   for (const world of ["normal", "isekai"]) {
+    if (world === "normal" && await isEncounterBattleInFlight()) {
+      console.log("[SW] unattendedWatch skip normal: encounter battle in flight");
+      continue;
+    }
+
     const enabled = await getState(wk("arenaSweepEnabled", world), false);
     const auto = await getState(wk("autoArena", world), false);
     console.log("[SW] unattendedWatch " + world + ": enabled=" + enabled + " autoArena=" + auto);
